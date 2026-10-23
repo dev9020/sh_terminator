@@ -6,6 +6,16 @@ import AppKit
 final class EqualSplitView: NSSplitView {
     private var didSetInitialPositions = false
 
+    /// The stock thin divider is barely visible against dark terminal
+    /// backgrounds, and horizontal ones don't show up at all. Paint every
+    /// divider explicitly in one solid colour, whatever the orientation.
+    override var dividerColor: NSColor { .tertiaryLabelColor }
+
+    override func drawDivider(in rect: NSRect) {
+        dividerColor.setFill()
+        rect.fill()
+    }
+
     override func layout() {
         super.layout()
         guard !didSetInitialPositions, subviews.count > 1, bounds.width > 0, bounds.height > 0 else { return }
