@@ -7,13 +7,17 @@ import AppKit
 /// Window-creation items target `AppDelegate.shared` directly since they are
 /// not tied to any particular existing window.
 enum MainMenuBuilder {
-    static func build(appDelegate: AppDelegate) -> NSMenu {
+    static func build(appDelegate: AppDelegate, favoritesMenu: NSMenu) -> NSMenu {
         let main = NSMenu()
 
         main.addItem(appMenuItem())
         main.addItem(fileMenuItem(appDelegate: appDelegate))
         main.addItem(editMenuItem())
         main.addItem(paneMenuItem())
+
+        let favoritesItem = NSMenuItem()
+        favoritesItem.submenu = favoritesMenu
+        main.addItem(favoritesItem)
 
         return main
     }
@@ -63,6 +67,12 @@ enum MainMenuBuilder {
 
     private static func editMenuItem() -> NSMenuItem {
         let editMenu = NSMenu(title: "Edit")
+        // Undo/Redo/Cut only apply to text fields (notes, favorites editor);
+        // they show as disabled while a terminal pane has focus.
+        editMenu.addItem(item("Undo", Selector(("undo:")), "z"))
+        editMenu.addItem(item("Redo", Selector(("redo:")), "z", modifiers: [.command, .shift]))
+        editMenu.addItem(.separator())
+        editMenu.addItem(item("Cut", #selector(NSText.cut(_:)), "x"))
         editMenu.addItem(item("Copy", #selector(NSText.copy(_:)), "c"))
         editMenu.addItem(item("Paste", #selector(NSText.paste(_:)), "v"))
         editMenu.addItem(item("Select All", #selector(NSText.selectAll(_:)), "a"))

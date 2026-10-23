@@ -19,9 +19,10 @@ swift build -c release
 
 echo "==> assembling ${APP_BUNDLE}"
 rm -rf "dist"
-mkdir -p "${APP_BUNDLE}/Contents/MacOS"
+mkdir -p "${APP_BUNDLE}/Contents/MacOS" "${APP_BUNDLE}/Contents/Resources"
 cp "${BUILD_DIR}/${APP_NAME}" "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}"
 cp "Resources/Info.plist" "${APP_BUNDLE}/Contents/Info.plist"
+cp "Resources/AppIcon.icns" "${APP_BUNDLE}/Contents/Resources/AppIcon.icns"
 
 echo "==> codesign (ad-hoc, hardened runtime)"
 codesign --force --deep --sign - \

@@ -3,26 +3,43 @@ import AppKit
 /// One window = one pane tree. Window-scoped actions (split, close pane,
 /// focus navigation, zoom) are implemented here and reached through the
 /// responder chain, which we explicitly extend to include this controller.
-final class PaneWindowController: NSWindowController, NSWindowDelegate {
+final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitViewDelegate {
     let splitController: SplitPaneController
+    private let favoritesSidebar = FavoritesSidebar()
+    private let sidebarSplit = NSSplitView()
     private var clickMonitor: Any?
+
+    private static let sidebarWidth: CGFloat = 130
 
     init(root: PaneNode) {
         self.splitController = SplitPaneController(root: root)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1080, height: 680),
+            contentRect: NSRect(x: 0, y: 0, width: 1080 + Self.sidebarWidth, height: 680),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "sh_terminator"
-        window.contentView = splitController.containerView
+        // Panes on the left, the favorites sidebar (one per window, shared by
+        // all panes) on the right. The sidebar holds its width when the window
+        // resizes. Both holding priorities must stay below the divider-drag
+        // priority (~490), or the user can't drag the divider at all.
+        sidebarSplit.isVertical = true
+        sidebarSplit.dividerStyle = .thin
+        sidebarSplit.addArrangedSubview(splitController.containerView)
+        sidebarSplit.addArrangedSubview(favoritesSidebar.view)
+        sidebarSplit.setHoldingPriority(NSLayoutConstraint.Priority(250), forSubviewAt: 0)
+        sidebarSplit.setHoldingPriority(NSLayoutConstraint.Priority(260), forSubviewAt: 1)
+        window.contentView = sidebarSplit
+        sidebarSplit.layoutSubtreeIfNeeded()
+        sidebarSplit.setPosition(sidebarSplit.bounds.width - Self.sidebarWidth, ofDividerAt: 0)
         window.center()
 
         super.init(window: window)
 
         window.delegate = self
+        sidebarSplit.delegate = self
         // Explicitly insert this controller into the responder chain so the
         // window-scoped menu actions below (target: nil) reach it.
         window.nextResponder = self
@@ -31,6 +48,9 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate {
 
         splitController.onEmptied = { [weak self] in
             self?.close()
+        }
+        favoritesSidebar.onPick = { [weak self] favorite in
+            self?.insert(command: favorite.command)
         }
 
         // SwiftTerm's own `becomeFirstResponder` override isn't `open`, so we
@@ -57,6 +77,14 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate {
             splitController.focus(session)
             break
         }
+    }
+
+    // MARK: - NSSplitViewDelegate
+
+    /// The thin divider is 1pt wide; give it a few points of grab area so it
+    /// is easy to hit with the mouse.
+    func splitView(_ splitView: NSSplitView, effectiveRect proposedEffectiveRect: NSRect, forDrawnRect drawnRect: NSRect, ofDividerAt dividerIndex: Int) -> NSRect {
+        proposedEffectiveRect.insetBy(dx: -3, dy: 0)
     }
 
     // MARK: - NSWindowDelegate
@@ -108,6 +136,35 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate {
 
     @objc func toggleZoomPane(_ sender: Any?) {
         splitController.toggleZoom()
+    }
+
+    // MARK: - Favorites
+
+    func insert(command: String) {
+        let session = splitController.focusedSession
+        session.insertWithoutRunning(command)
+        splitController.focus(session)
+    }
+
+    @objc func insertFavorite(_ sender: Any?) {
+        guard let id = (sender as? NSMenuItem)?.representedObject as? UUID,
+              let favorite = FavoritesStore.shared.favorite(id: id) else { return }
+        insert(command: favorite.command)
+    }
+
+    @objc func toggleFavoritesSidebar(_ sender: Any?) {
+        let sidebar = favoritesSidebar.view
+        sidebar.isHidden.toggle()
+        if !sidebar.isHidden {
+            sidebarSplit.adjustSubviews()
+            sidebarSplit.setPosition(sidebarSplit.bounds.width - Self.sidebarWidth, ofDividerAt: 0)
+        }
+        splitController.focus(splitController.focusedSession)
+    }
+
+    @objc func addSelectionToFavorites(_ sender: Any?) {
+        let selection = splitController.focusedSession.terminalView.getSelection() ?? ""
+        AppDelegate.shared.showFavorites(addingCommand: selection.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     @objc func copyAndClearClipboard(_ sender: Any?) {

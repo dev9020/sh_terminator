@@ -5,11 +5,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static let shared = AppDelegate()
 
     private var windowControllers: [PaneWindowController] = []
+    private var favoritesMenu: FavoritesMenu?
+    private lazy var favoritesWindow = FavoritesWindowController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         SecurityHardening.hardenProcess()
-        NSApp.mainMenu = MainMenuBuilder.build(appDelegate: self)
+        let favoritesMenu = FavoritesMenu(appDelegate: self)
+        self.favoritesMenu = favoritesMenu
+        NSApp.mainMenu = MainMenuBuilder.build(appDelegate: self, favoritesMenu: favoritesMenu.menu)
         openWindow(root: PaneTemplates.single())
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        NotesStore.shared.flush()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -31,6 +39,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func newWindow(_ sender: Any?) {
         openWindow(root: PaneTemplates.single())
+    }
+
+    @objc func showFavorites(_ sender: Any?) {
+        favoritesWindow.showWindow(nil)
+    }
+
+    func showFavorites(addingCommand command: String) {
+        favoritesWindow.addAndEdit(command: command)
     }
 
     @objc func newTemplateTwoVertical(_ sender: Any?) { openWindow(root: PaneTemplates.twoVertical()) }

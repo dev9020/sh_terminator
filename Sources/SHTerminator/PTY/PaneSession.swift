@@ -31,6 +31,28 @@ final class PaneSession: NSObject, LocalProcessTerminalViewDelegate {
         )
     }
 
+    /// Types `text` at the shell prompt without running it: trailing line
+    /// breaks are dropped, and the text goes in as a bracketed paste when the
+    /// shell supports it (zsh/bash/fish do), so even an embedded newline
+    /// can't submit the line. If the program in the pane hasn't enabled
+    /// bracketed paste, inner line breaks are turned into spaces instead.
+    private static let bracketedPasteStart: [UInt8] = Array("\u{1b}[200~".utf8)
+    private static let bracketedPasteEnd: [UInt8] = Array("\u{1b}[201~".utf8)
+
+    func insertWithoutRunning(_ text: String) {
+        var text = text
+        while let last = text.last, last.isNewline || last.isWhitespace { text.removeLast() }
+        guard !text.isEmpty else { return }
+
+        if terminalView.getTerminal().bracketedPasteMode {
+            terminalView.send(data: PaneSession.bracketedPasteStart[...])
+            terminalView.send(txt: text)
+            terminalView.send(data: PaneSession.bracketedPasteEnd[...])
+        } else {
+            terminalView.send(txt: text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).joined(separator: " "))
+        }
+    }
+
     func terminate() {
         terminalView.terminate()
     }
