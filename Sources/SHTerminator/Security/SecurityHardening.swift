@@ -1,10 +1,12 @@
 import AppKit
+import Carbon
 import Darwin
 
 /// Every OS-level protection this app applies lives here, in one place, so
 /// the security posture can be read and audited without hunting through the
 /// rest of the codebase. See SECURITY.md for the full threat model and the
-/// residual risks this cannot close.
+/// residual risks this cannot close. (The window lock lives next door, in
+/// `PrivacyLock.swift`; the paste check in `PastePolicy.swift`.)
 @MainActor
 enum SecurityHardening {
     /// Call once, as early as possible during process startup.
@@ -30,23 +32,93 @@ enum SecurityHardening {
         window.isRestorable = false
     }
 
-    private static var pendingClearToken: UUID?
+    // MARK: - Secure keyboard entry
 
-    /// Copies the current selection in `terminalView` the normal way, then
-    /// clears the system clipboard after `seconds` — for pasting a password
-    /// or seed phrase without leaving it sitting in clipboard history
-    /// indefinitely. Regular Cmd+C still behaves normally everywhere else;
-    /// this is an additional opt-in command, not a restriction.
-    static func copyAndScheduleClipboardClear(from terminalView: Any, after seconds: TimeInterval = 20) {
-        guard let copyable = terminalView as? NSResponder, copyable.responds(to: #selector(NSText.copy(_:))) else { return }
-        copyable.perform(#selector(NSText.copy(_:)), with: copyable)
+    private static var secureInputEngaged = false
 
-        let token = UUID()
-        pendingClearToken = token
-        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
-            // If another copy happened since, its own timer owns the clear.
-            guard pendingClearToken == token else { return }
-            NSPasteboard.general.clearContents()
+    /// Turns macOS "secure event input" on while this app is frontmost (and
+    /// the setting is on), off otherwise. While it's on, other processes'
+    /// keyboard event taps — the usual way keyloggers and some "productivity"
+    /// tools read keystrokes — get nothing from what is typed here, e.g. a
+    /// `sudo` or `ssh` password. Same mechanism as Terminal.app's
+    /// "Secure Keyboard Entry". Call on app activation/deactivation and when
+    /// the setting changes; calls to the OS stay balanced.
+    static func updateSecureKeyboardEntry() {
+        let wanted = AppSettings.secureKeyboardEntry && NSApp.isActive
+        guard wanted != secureInputEngaged else { return }
+        if wanted {
+            EnableSecureEventInput()
+        } else {
+            DisableSecureEventInput()
         }
+        secureInputEngaged = wanted
+    }
+
+    // MARK: - Clipboard
+
+    /// Markers from nspasteboard.org that clipboard managers (Maccy, Paste,
+    /// Raycast, Alfred, 1Password…) honour by not recording the entry in
+    /// their history.
+    private static let concealedType = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
+    private static let transientType = NSPasteboard.PasteboardType("org.nspasteboard.TransientType")
+
+    /// Puts `string` on the clipboard marked as a secret: clipboard managers
+    /// skip it, and it stays on this Mac (no Universal Clipboard hand-off to
+    /// other devices). With `clearAfter`, the clipboard is emptied after that
+    /// many seconds — unless something else was copied in the meantime (in
+    /// any app), which is then left alone.
+    static func copySecret(_ string: String, clearAfter seconds: TimeInterval? = nil) {
+        guard !string.isEmpty else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.prepareForNewContents(with: .currentHostOnly)
+        pasteboard.setString(string, forType: .string)
+        pasteboard.setString("", forType: concealedType)
+        pasteboard.setString("", forType: transientType)
+
+        guard let seconds else { return }
+        let ownChange = pasteboard.changeCount
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
+            guard pasteboard.changeCount == ownChange else { return }
+            pasteboard.clearContents()
+        }
+    }
+
+    // MARK: - Private files
+
+    /// Atomically replaces `url` with `data`, created owner-only (0600) from
+    /// the first byte, in a directory created 0700. Unlike
+    /// `Data.write(options: .atomic)` followed by `chmod`, there's no moment
+    /// where the file exists with the default, group/world-readable mode.
+    static func writePrivateFile(_ data: Data, to url: URL) throws {
+        let dir = url.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+
+        let temp = dir.appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString).tmp")
+        let fd = open(temp.path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0o600)
+        guard fd >= 0 else { throw posixError() }
+
+        var failure: Error? = data.withUnsafeBytes { buffer in
+            var written = 0
+            while written < buffer.count {
+                let n = write(fd, buffer.baseAddress! + written, buffer.count - written)
+                if n < 0 {
+                    if errno == EINTR { continue }
+                    return posixError()
+                }
+                written += n
+            }
+            return nil
+        }
+        if failure == nil, fsync(fd) != 0 { failure = posixError() }
+        close(fd)
+        if failure == nil, rename(temp.path, url.path) != 0 { failure = posixError() }
+        if let failure {
+            unlink(temp.path)
+            throw failure
+        }
+    }
+
+    private static func posixError() -> Error {
+        POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
     }
 }

@@ -29,9 +29,9 @@ final class NotesPanel: NSObject, NSTextViewDelegate {
     // MARK: - Actions
 
     @objc private func copyAll(_ sender: Any?) {
-        guard !textView.string.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(textView.string, forType: .string)
+        // Notes often hold secrets: keep them out of clipboard managers'
+        // history and off other devices (Universal Clipboard).
+        SecurityHardening.copySecret(textView.string)
     }
 
     @objc private func clearAll(_ sender: Any?) {

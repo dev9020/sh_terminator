@@ -8,11 +8,15 @@ import AppKit
 /// focus away from the terminal. Under the list, behind a draggable
 /// divider, sits the shared `NotesPanel`.
 @MainActor
-final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelegate {
+final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate {
     let view = NSView()
     var onPick: ((Favorite) -> Void)?
 
     private let tableView = NSTableView()
+    private let searchField = NSSearchField()
+    /// The favorites matching the search, with their index in the full list
+    /// (which decides their ⌘1…⌘9 shortcut).
+    private var visible: [(index: Int, favorite: Favorite)] = []
     private let notes = NotesPanel()
     private let emptyLabel = NSTextField(wrappingLabelWithString: "No favorites yet.\nAdd one with ⌘⇧F, or select a command in the terminal and press ⌘⇧S.")
 
@@ -28,8 +32,17 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
     }
 
     private func reload() {
+        let query = searchField.stringValue.trimmingCharacters(in: .whitespaces)
+        visible = FavoritesStore.shared.items.enumerated()
+            .filter { query.isEmpty || $0.element.name.localizedCaseInsensitiveContains(query) || $0.element.command.localizedCaseInsensitiveContains(query) }
+            .map { ($0.offset, $0.element) }
         tableView.reloadData()
         emptyLabel.isHidden = !FavoritesStore.shared.items.isEmpty
+        searchField.isHidden = FavoritesStore.shared.items.count < 2 && query.isEmpty
+    }
+
+    func controlTextDidChange(_ notification: Notification) {
+        reload()
     }
 
     // MARK: - UI
@@ -48,6 +61,13 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
         let header = NSStackView(views: [title, NSView(), manage])
         header.orientation = .horizontal
         header.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 10)
+
+        searchField.placeholderString = "Filter"
+        searchField.controlSize = .small
+        searchField.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        searchField.delegate = self
+        // Same rule as the notes: what's typed here stays put.
+        searchField.isAutomaticTextCompletionEnabled = false
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("favorite"))
         tableView.addTableColumn(column)
@@ -75,7 +95,11 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
         background.blendingMode = .behindWindow
 
         let favoritesPane = NSView()
-        for subview in [header, scroll, emptyLabel] {
+        let listStack = NSStackView(views: [searchField, scroll])
+        listStack.orientation = .vertical
+        listStack.spacing = 4
+        listStack.detachesHiddenViews = true
+        for subview in [header, listStack, emptyLabel] {
             subview.translatesAutoresizingMaskIntoConstraints = false
             favoritesPane.addSubview(subview)
         }
@@ -109,10 +133,14 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
             header.leadingAnchor.constraint(equalTo: favoritesPane.leadingAnchor),
             header.trailingAnchor.constraint(equalTo: favoritesPane.trailingAnchor),
             header.heightAnchor.constraint(equalToConstant: 24),
-            scroll.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 4),
-            scroll.leadingAnchor.constraint(equalTo: favoritesPane.leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: favoritesPane.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: favoritesPane.bottomAnchor),
+            listStack.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 4),
+            listStack.leadingAnchor.constraint(equalTo: favoritesPane.leadingAnchor),
+            listStack.trailingAnchor.constraint(equalTo: favoritesPane.trailingAnchor),
+            listStack.bottomAnchor.constraint(equalTo: favoritesPane.bottomAnchor),
+            searchField.leadingAnchor.constraint(equalTo: listStack.leadingAnchor, constant: 8),
+            searchField.trailingAnchor.constraint(equalTo: listStack.trailingAnchor, constant: -8),
+            scroll.leadingAnchor.constraint(equalTo: listStack.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: listStack.trailingAnchor),
             emptyLabel.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 16),
             emptyLabel.leadingAnchor.constraint(equalTo: favoritesPane.leadingAnchor, constant: 16),
             emptyLabel.trailingAnchor.constraint(equalTo: favoritesPane.trailingAnchor, constant: -16),
@@ -121,20 +149,20 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
 
     @objc private func rowClicked(_ sender: Any?) {
         let row = tableView.clickedRow
-        guard FavoritesStore.shared.items.indices.contains(row) else { return }
-        onPick?(FavoritesStore.shared.items[row])
+        guard visible.indices.contains(row) else { return }
+        onPick?(visible[row].favorite)
     }
 
     // MARK: - NSTableViewDataSource / Delegate
 
     func numberOfRows(in tableView: NSTableView) -> Int {
-        FavoritesStore.shared.items.count
+        visible.count
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let cell = (tableView.makeView(withIdentifier: FavoriteCell.identifier, owner: self) as? FavoriteCell) ?? FavoriteCell()
-        let favorite = FavoritesStore.shared.items[row]
-        cell.nameLabel.stringValue = row < 9 ? "\(favorite.name)  ⌘\(row + 1)" : favorite.name
+        let (index, favorite) = visible[row]
+        cell.nameLabel.stringValue = index < 9 ? "\(favorite.name)  ⌘\(index + 1)" : favorite.name
         cell.commandLabel.stringValue = favorite.command
         cell.toolTip = favorite.command
         return cell

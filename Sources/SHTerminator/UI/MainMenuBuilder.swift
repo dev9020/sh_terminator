@@ -10,9 +10,10 @@ enum MainMenuBuilder {
     static func build(appDelegate: AppDelegate, favoritesMenu: NSMenu) -> NSMenu {
         let main = NSMenu()
 
-        main.addItem(appMenuItem())
+        main.addItem(appMenuItem(appDelegate: appDelegate))
         main.addItem(fileMenuItem(appDelegate: appDelegate))
         main.addItem(editMenuItem())
+        main.addItem(viewMenuItem(appDelegate: appDelegate))
         main.addItem(paneMenuItem())
 
         let favoritesItem = NSMenuItem()
@@ -29,10 +30,26 @@ enum MainMenuBuilder {
         return menuItem
     }
 
-    private static func appMenuItem() -> NSMenuItem {
+    private static func appMenuItem(appDelegate: AppDelegate) -> NSMenuItem {
         let appMenu = NSMenu()
         let appName = ProcessInfo.processInfo.processName
         appMenu.addItem(item("About \(appName)", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), "", target: nil))
+        appMenu.addItem(.separator())
+
+        // Security settings; checkmarks are set in AppDelegate.validateMenuItem.
+        appMenu.addItem(item("Secure Keyboard Entry", #selector(AppDelegate.toggleSecureKeyboardEntry(_:)), "", target: appDelegate))
+        appMenu.addItem(item("Lock Now", #selector(AppDelegate.lockNow(_:)), "l", modifiers: [.command, .control], target: appDelegate))
+        let autoLockMenu = NSMenu(title: "Auto-Lock")
+        for (title, minutes) in [("Never", 0), ("After 1 Minute", 1), ("After 5 Minutes", 5), ("After 15 Minutes", 15), ("After 30 Minutes", 30)] {
+            let entry = item(title, #selector(AppDelegate.setAutoLockMinutes(_:)), "", target: appDelegate)
+            entry.tag = minutes
+            autoLockMenu.addItem(entry)
+        }
+        let autoLockItem = NSMenuItem(title: "Auto-Lock", action: nil, keyEquivalent: "")
+        autoLockItem.submenu = autoLockMenu
+        appMenu.addItem(autoLockItem)
+        appMenu.addItem(item("Hide Windows When in Background", #selector(AppDelegate.toggleHideWhenInactive(_:)), "", target: appDelegate))
+        appMenu.addItem(item("Keep Notes Across Restarts", #selector(AppDelegate.togglePersistNotes(_:)), "", target: appDelegate))
         appMenu.addItem(.separator())
         appMenu.addItem(item("Quit \(appName)", #selector(NSApplication.terminate(_:)), "q"))
 
@@ -78,10 +95,48 @@ enum MainMenuBuilder {
         editMenu.addItem(item("Select All", #selector(NSText.selectAll(_:)), "a"))
         editMenu.addItem(.separator())
         editMenu.addItem(item("Copy & Clear Clipboard After 20s", #selector(PaneWindowController.copyAndClearClipboard(_:)), "c", modifiers: [.command, .option]))
+        editMenu.addItem(item("Clear Scrollback", #selector(PaneWindowController.clearScrollback(_:)), "k"))
+        editMenu.addItem(.separator())
+
+        // Handled by SwiftTerm's own find bar in the focused pane; the tags
+        // are the standard NSFindPanelAction values it switches on.
+        let findMenu = NSMenu(title: "Find")
+        for (title, key, modifiers, action) in [
+            ("Find…", "f", NSEvent.ModifierFlags.command, NSFindPanelAction.showFindPanel),
+            ("Find Next", "g", .command, .next),
+            ("Find Previous", "g", [.command, .shift], .previous),
+        ] {
+            let entry = item(title, #selector(NSTextView.performFindPanelAction(_:)), key, modifiers: modifiers)
+            entry.tag = Int(action.rawValue)
+            findMenu.addItem(entry)
+        }
+        let findItem = NSMenuItem(title: "Find", action: nil, keyEquivalent: "")
+        findItem.submenu = findMenu
+        editMenu.addItem(findItem)
 
         let menuItem = NSMenuItem()
         menuItem.submenu = editMenu
         return menuItem
+    }
+
+    private static func viewMenuItem(appDelegate: AppDelegate) -> NSMenuItem {
+        let viewMenu = NSMenu(title: "View")
+        viewMenu.addItem(item("Bigger", #selector(AppDelegate.increaseFontSize(_:)), "+", target: appDelegate))
+        // ⌘= is the same key as ⌘+ without Shift; accept both.
+        let biggerAlias = item("Bigger", #selector(AppDelegate.increaseFontSize(_:)), "=", target: appDelegate)
+        biggerAlias.isHidden = true
+        biggerAlias.allowsKeyEquivalentWhenHidden = true
+        viewMenu.addItem(biggerAlias)
+        viewMenu.addItem(item("Smaller", #selector(AppDelegate.decreaseFontSize(_:)), "-", target: appDelegate))
+        viewMenu.addItem(item("Default Font Size", #selector(AppDelegate.resetFontSize(_:)), "0", target: appDelegate))
+
+        let menuItem = NSMenuItem()
+        menuItem.submenu = viewMenu
+        return menuItem
+    }
+
+    private static func arrow(_ key: Int) -> String {
+        String(Character(UnicodeScalar(key)!))
     }
 
     private static func paneMenuItem() -> NSMenuItem {
@@ -91,8 +146,13 @@ enum MainMenuBuilder {
         paneMenu.addItem(.separator())
         paneMenu.addItem(item("Focus Next Pane", #selector(PaneWindowController.focusNextPane(_:)), "]"))
         paneMenu.addItem(item("Focus Previous Pane", #selector(PaneWindowController.focusPreviousPane(_:)), "["))
+        paneMenu.addItem(item("Focus Pane on the Left", #selector(PaneWindowController.focusPaneLeft(_:)), arrow(NSLeftArrowFunctionKey), modifiers: [.command, .option]))
+        paneMenu.addItem(item("Focus Pane on the Right", #selector(PaneWindowController.focusPaneRight(_:)), arrow(NSRightArrowFunctionKey), modifiers: [.command, .option]))
+        paneMenu.addItem(item("Focus Pane Above", #selector(PaneWindowController.focusPaneAbove(_:)), arrow(NSUpArrowFunctionKey), modifiers: [.command, .option]))
+        paneMenu.addItem(item("Focus Pane Below", #selector(PaneWindowController.focusPaneBelow(_:)), arrow(NSDownArrowFunctionKey), modifiers: [.command, .option]))
         paneMenu.addItem(.separator())
         paneMenu.addItem(item("Toggle Zoom Pane", #selector(PaneWindowController.toggleZoomPane(_:)), "\r"))
+        paneMenu.addItem(item("Broadcast Input to All Panes", #selector(PaneWindowController.toggleBroadcastInput(_:)), "i", modifiers: [.command, .option]))
 
         let menuItem = NSMenuItem()
         menuItem.submenu = paneMenu

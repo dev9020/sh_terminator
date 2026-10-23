@@ -16,6 +16,11 @@ let package = Package(
                 .product(name: "SwiftTerm", package: "SwiftTerm")
             ],
             path: "Sources/SHTerminator"
-        )
+        ),
+        .testTarget(
+            name: "SHTerminatorTests",
+            dependencies: ["SHTerminator"],
+            path: "Tests/SHTerminatorTests"
+        ),
     ]
 )

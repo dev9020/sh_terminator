@@ -3,7 +3,9 @@ import Foundation
 /// The free-form scratch notes shown under the favorites sidebar. One text
 /// shared by every window, kept across restarts in
 /// `~/Library/Application Support/SHTerminator/notes.txt` (dir 0700,
-/// file 0600) — plain text, see SECURITY.md.
+/// file 0600) — plain text, see SECURITY.md. With
+/// `AppSettings.persistNotes` off, the text lives in memory only and the
+/// file is deleted.
 @MainActor
 final class NotesStore {
     static let shared = NotesStore()
@@ -21,7 +23,18 @@ final class NotesStore {
     }()
 
     private init() {
-        text = (try? String(contentsOf: fileURL, encoding: .utf8)) ?? ""
+        if AppSettings.persistNotes {
+            text = (try? String(contentsOf: fileURL, encoding: .utf8)) ?? ""
+        } else {
+            try? FileManager.default.removeItem(at: fileURL)
+        }
+    }
+
+    /// Call after `AppSettings.persistNotes` changes: turning it off deletes
+    /// the file now, turning it on writes the current text.
+    func persistenceSettingChanged() {
+        saveScheduled = true
+        flush()
     }
 
     func setText(_ newText: String, from source: AnyObject?) {
@@ -44,15 +57,12 @@ final class NotesStore {
     func flush() {
         guard saveScheduled else { return }
         saveScheduled = false
-        let fm = FileManager.default
         do {
-            try fm.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-            if text.isEmpty {
-                // Cleared notes leave nothing behind on disk.
-                try? fm.removeItem(at: fileURL)
+            if text.isEmpty || !AppSettings.persistNotes {
+                // Cleared (or memory-only) notes leave nothing behind on disk.
+                try? FileManager.default.removeItem(at: fileURL)
             } else {
-                try Data(text.utf8).write(to: fileURL, options: .atomic)
-                try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
+                try SecurityHardening.writePrivateFile(Data(text.utf8), to: fileURL)
             }
         } catch {
             NSLog("sh_terminator: failed to save notes: \(error.localizedDescription)")

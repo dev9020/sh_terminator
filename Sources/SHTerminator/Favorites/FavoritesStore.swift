@@ -76,14 +76,10 @@ final class FavoritesStore {
     }
 
     private func save() {
-        let fm = FileManager.default
-        let dir = fileURL.deletingLastPathComponent()
         do {
-            try fm.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            try encoder.encode(items).write(to: fileURL, options: .atomic)
-            try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
+            try SecurityHardening.writePrivateFile(encoder.encode(items), to: fileURL)
         } catch {
             NSLog("sh_terminator: failed to save favorites: \(error.localizedDescription)")
         }

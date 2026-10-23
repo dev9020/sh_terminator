@@ -33,4 +33,7 @@ codesign --force --deep --sign - \
 echo "==> verifying signature"
 codesign --verify --verbose "${APP_BUNDLE}"
 
+echo "==> security audit"
+./Scripts/audit.sh
+
 echo "Done: ${APP_BUNDLE}"

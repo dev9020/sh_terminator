@@ -3,13 +3,18 @@ import AppKit
 /// One window = one pane tree. Window-scoped actions (split, close pane,
 /// focus navigation, zoom) are implemented here and reached through the
 /// responder chain, which we explicitly extend to include this controller.
-final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitViewDelegate {
+final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitViewDelegate, NSMenuItemValidation {
     let splitController: SplitPaneController
     private let favoritesSidebar = FavoritesSidebar()
     private let sidebarSplit = NSSplitView()
+    private let lockScreen = LockScreenView()
     private var clickMonitor: Any?
+    /// Set once the user agreed to close despite running programs, so the
+    /// second `windowShouldClose` lets it through.
+    private var closeConfirmed = false
 
     private static let sidebarWidth: CGFloat = 130
+    private static let baseTitle = "sh_terminator"
 
     init(root: PaneNode) {
         self.splitController = SplitPaneController(root: root)
@@ -20,7 +25,7 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             backing: .buffered,
             defer: false
         )
-        window.title = "sh_terminator"
+        window.title = Self.baseTitle
         // Panes on the left, the favorites sidebar (one per window, shared by
         // all panes) on the right. The sidebar holds its width when the window
         // resizes. Both holding priorities must stay below the divider-drag
@@ -49,6 +54,9 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         splitController.onEmptied = { [weak self] in
             self?.close()
         }
+        splitController.onFocusedTitleChange = { [weak window] title in
+            window?.title = title.isEmpty ? Self.baseTitle : title
+        }
         favoritesSidebar.onPick = { [weak self] favorite in
             self?.insert(command: favorite.command)
         }
@@ -63,6 +71,9 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             self?.handleClick(event)
             return event
         }
+
+        NotificationCenter.default.addObserver(self, selector: #selector(privacyLockDidChange(_:)), name: PrivacyLock.didChange, object: nil)
+        privacyLockDidChange(nil)
     }
 
     required init?(coder: NSCoder) {
@@ -70,12 +81,39 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     private func handleClick(_ event: NSEvent) {
-        guard event.window === window, let contentView = window?.contentView else { return }
+        guard event.window === window, !PrivacyLock.shared.isEngaged, let contentView = window?.contentView else { return }
         let location = contentView.convert(event.locationInWindow, from: nil)
-        guard let hitView = contentView.hitTest(location) else { return }
-        for session in splitController.root.leaves() where hitView === session.terminalView || hitView.isDescendant(of: session.terminalView) {
-            splitController.focus(session)
-            break
+        guard let hitView = contentView.hitTest(location), let session = splitController.session(containing: hitView) else { return }
+        splitController.focus(session)
+    }
+
+    /// Names of the programs (other than the shells themselves) still
+    /// running in this window's panes.
+    func runningPrograms() -> [String] {
+        splitController.root.leaves().compactMap(\.foregroundProgramName)
+    }
+
+    func applyFontSize() {
+        splitController.applyFontSize()
+    }
+
+    // MARK: - Privacy lock
+
+    /// While locked or covered, the panes and sidebar are taken out of the
+    /// window entirely — nothing typed, clicked or sent from a menu can reach
+    /// a shell — and put back when it lifts.
+    @objc private func privacyLockDidChange(_ notification: Notification?) {
+        guard let window else { return }
+        let lock = PrivacyLock.shared
+        if lock.isEngaged {
+            lockScreen.update(for: lock.state)
+            if window.contentView !== lockScreen {
+                window.contentView = lockScreen
+            }
+            window.makeFirstResponder(lockScreen)
+        } else if window.contentView !== sidebarSplit {
+            window.contentView = sidebarSplit
+            splitController.focus(splitController.focusedSession)
         }
     }
 
@@ -101,18 +139,55 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         if let window { SecurityHardening.harden(window: window) }
     }
 
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        let running = runningPrograms()
+        guard !closeConfirmed, !running.isEmpty else { return true }
+        confirm(
+            message: "Close this window?",
+            info: RunningPrograms.describe(running) + " Closing the window will end them.",
+            button: "Close"
+        ) { [weak self] in
+            self?.closeConfirmed = true
+            self?.window?.performClose(nil)
+        }
+        return false
+    }
+
     func windowWillClose(_ notification: Notification) {
         if let clickMonitor {
             NSEvent.removeMonitor(clickMonitor)
             self.clickMonitor = nil
         }
+        splitController.stop()
         for pane in splitController.root.leaves() {
             pane.terminate()
         }
         AppDelegate.shared.windowClosed(self)
     }
 
+    /// Asks as a sheet on this window; `onConfirm` runs only for `button`.
+    private func confirm(message: String, info: String, button: String, onConfirm: @escaping () -> Void) {
+        guard let window, window.attachedSheet == nil else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = message
+        alert.informativeText = info
+        alert.addButton(withTitle: button)
+        alert.addButton(withTitle: "Cancel")
+        alert.window.sharingType = .none
+        alert.beginSheetModal(for: window) { response in
+            if response == .alertFirstButtonReturn { onConfirm() }
+        }
+    }
+
     // MARK: - Pane actions (routed via the responder chain)
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(toggleBroadcastInput(_:)) {
+            menuItem.state = splitController.isBroadcasting ? .on : .off
+        }
+        return !PrivacyLock.shared.isEngaged
+    }
 
     @objc func splitPaneVertically(_ sender: Any?) {
         splitController.splitFocused(axis: .vertical)
@@ -123,7 +198,17 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     @objc func closeFocusedPane(_ sender: Any?) {
-        splitController.closeFocused()
+        guard let program = splitController.focusedSession.foregroundProgramName else {
+            splitController.closeFocused()
+            return
+        }
+        confirm(
+            message: "Close this pane?",
+            info: "\(program) is still running in it. Closing the pane will end it.",
+            button: "Close"
+        ) { [weak self] in
+            self?.splitController.closeFocused()
+        }
     }
 
     @objc func focusNextPane(_ sender: Any?) {
@@ -134,16 +219,35 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         splitController.focusPrevious()
     }
 
+    @objc func focusPaneLeft(_ sender: Any?) { splitController.focus(.left) }
+    @objc func focusPaneRight(_ sender: Any?) { splitController.focus(.right) }
+    @objc func focusPaneAbove(_ sender: Any?) { splitController.focus(.up) }
+    @objc func focusPaneBelow(_ sender: Any?) { splitController.focus(.down) }
+
     @objc func toggleZoomPane(_ sender: Any?) {
         splitController.toggleZoom()
     }
 
+    @objc func toggleBroadcastInput(_ sender: Any?) {
+        splitController.toggleBroadcast()
+    }
+
+    @objc func clearScrollback(_ sender: Any?) {
+        splitController.focusedSession.clearScrollback()
+    }
+
     // MARK: - Favorites
 
+    /// Inserts `command` (after asking for any `{{placeholders}}` in it)
+    /// into the pane that was focused when it was picked.
     func insert(command: String) {
+        guard let window else { return }
         let session = splitController.focusedSession
-        session.insertWithoutRunning(command)
-        splitController.focus(session)
+        Placeholders.resolve(command, in: window) { [weak self] filled in
+            guard let self, self.splitController.root.contains(session), !PrivacyLock.shared.isEngaged else { return }
+            session.insertWithoutRunning(filled)
+            self.splitController.focus(session)
+        }
     }
 
     @objc func insertFavorite(_ sender: Any?) {
@@ -168,6 +272,7 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     @objc func copyAndClearClipboard(_ sender: Any?) {
-        SecurityHardening.copyAndScheduleClipboardClear(from: splitController.focusedSession.terminalView)
+        let selection = splitController.focusedSession.terminalView.getSelection() ?? ""
+        SecurityHardening.copySecret(selection, clearAfter: 20)
     }
 }
