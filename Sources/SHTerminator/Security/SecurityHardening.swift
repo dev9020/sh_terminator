@@ -83,6 +83,31 @@ enum SecurityHardening {
         }
     }
 
+    // MARK: - Text editing
+
+    /// Text typed or pasted here — commands, hosts, keys, passwords — must
+    /// stay exactly as entered: no spelling or grammar checks, no "smart"
+    /// quotes, dashes or replacements (`"` → `“`, `--` → `—` break a
+    /// command silently), and no Writing Tools (Apple Intelligence), which
+    /// would offer to send the text off for rewriting. For the notes' text
+    /// view and, through `PlainTextField`/`PlainSearchField`, the field
+    /// editor of every editable field.
+    static func disableTextRewriting(in textView: NSTextView) {
+        textView.isContinuousSpellCheckingEnabled = false
+        textView.isGrammarCheckingEnabled = false
+        textView.isAutomaticSpellingCorrectionEnabled = false
+        textView.isAutomaticTextCompletionEnabled = false
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
+        textView.isAutomaticLinkDetectionEnabled = false
+        textView.isAutomaticDataDetectionEnabled = false
+        textView.smartInsertDeleteEnabled = false
+        if #available(macOS 15.0, *) {
+            textView.writingToolsBehavior = .none
+        }
+    }
+
     // MARK: - Private files
 
     /// Atomically replaces `url` with `data`, created owner-only (0600) from

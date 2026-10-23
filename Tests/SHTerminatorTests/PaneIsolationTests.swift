@@ -61,4 +61,12 @@ import Testing
         #expect(view.getTerminal().bracketedPasteMode)
         #expect(view.pasteIsBracketedByShell)
     }
+
+    @Test func shellGetsTheUsersPrivateTmpdirButNothingElseExtra() {
+        let env = PaneSession.shellEnvironment(from: ["TMPDIR": "/var/folders/xy/T/", "PATH": "/evil", "DYLD_INSERT_LIBRARIES": "/x.dylib"])
+        #expect(env.contains("TMPDIR=/var/folders/xy/T/"))
+        #expect(env.contains("TERM=xterm-256color"))
+        #expect(!env.contains { $0.hasPrefix("PATH=") || $0.hasPrefix("DYLD_") })
+        #expect(!PaneSession.shellEnvironment(from: [:]).contains { $0.hasPrefix("TMPDIR=") })
+    }
 }

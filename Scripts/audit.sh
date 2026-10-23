@@ -77,6 +77,17 @@ if grep -rn "toolTip = favorite" Sources/SHTerminator; then
 fi
 ok "no favorites in tooltips"
 
+# SECURITY.md §12 — editable text is never rewritten (smart quotes, autocorrect, Writing Tools).
+if grep -rnE "NSTextField\((string:)?[^)]*\)|NSSearchField\(\)|NSTextField\(frame" Sources/SHTerminator | grep -vE "labelWithString|wrappingLabelWithString"; then
+    fail "editable NSTextField/NSSearchField used instead of PlainTextField/PlainSearchField"
+fi
+grep -q "SecurityHardening.disableTextRewriting(in: textView)" Sources/SHTerminator/Notes/NotesPanel.swift || fail "notes text view rewrites text"
+ok "editable fields never rewrite text"
+
+# SECURITY.md §8 — the shell gets the user's private TMPDIR, not /tmp.
+grep -q "environment: Self.shellEnvironment()" Sources/SHTerminator/PTY/PaneSession.swift || fail "shell started without shellEnvironment (TMPDIR)"
+ok "shell environment includes TMPDIR"
+
 if [ -d dist/SHTerminator.app ]; then
     codesign --verify --strict dist/SHTerminator.app || fail "signature does not verify"
     codesign -d --verbose=2 dist/SHTerminator.app 2>&1 | grep -q "flags=.*runtime" || fail "Hardened Runtime not enabled on dist/SHTerminator.app"

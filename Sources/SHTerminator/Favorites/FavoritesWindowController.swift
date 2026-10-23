@@ -202,7 +202,7 @@ final class FavoritesWindowController: NSWindowController, NSWindowDelegate, NST
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         guard let column = tableColumn?.identifier else { return nil }
         let field = (tableView.makeView(withIdentifier: column, owner: self) as? NSTextField) ?? {
-            let field = NSTextField()
+            let field = PlainTextField()
             field.identifier = column
             field.isBordered = false
             field.drawsBackground = false

@@ -75,23 +75,8 @@ final class NotesPanel: NSObject, NSTextViewDelegate {
         textView.allowsUndo = true
         textView.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
         textView.textContainerInset = NSSize(width: 4, height: 4)
-        // Notes will often hold commands, keys or passwords: no spelling or
-        // grammar checks and no "smart" rewriting of what was pasted.
-        textView.isContinuousSpellCheckingEnabled = false
-        textView.isGrammarCheckingEnabled = false
-        textView.isAutomaticSpellingCorrectionEnabled = false
-        textView.isAutomaticTextCompletionEnabled = false
-        textView.isAutomaticQuoteSubstitutionEnabled = false
-        textView.isAutomaticDashSubstitutionEnabled = false
-        textView.isAutomaticTextReplacementEnabled = false
-        textView.isAutomaticLinkDetectionEnabled = false
-        textView.isAutomaticDataDetectionEnabled = false
-        textView.smartInsertDeleteEnabled = false
-        // Nor Writing Tools (Apple Intelligence), which would offer to send
-        // the text off for rewriting.
-        if #available(macOS 15.0, *) {
-            textView.writingToolsBehavior = .none
-        }
+        // Notes will often hold commands, keys or passwords.
+        SecurityHardening.disableTextRewriting(in: textView)
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = true
         textView.backgroundColor = NSColor.textBackgroundColor.withAlphaComponent(0.5)

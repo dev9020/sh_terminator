@@ -170,7 +170,8 @@ final class SplitPaneController: NSObject {
 
     /// - Pastes go through each pane's own `sendPaste`, so whether a line
     ///   break can act as Return is decided by the program in *that* pane,
-    ///   not the one the user pasted into.
+    ///   not the one the user pasted into — "Paste As Is" included; only
+    ///   "Paste and Run Lines" runs them everywhere.
     /// - Keys typed or text pasted while the source pane doesn't echo (a
     ///   password prompt) only reach panes that don't echo either — a
     ///   `sudo` password typed or pasted once for every pane still works,
@@ -246,6 +247,10 @@ final class SplitPaneController: NSObject {
         session.terminalView.onUserInput = { [weak self, weak session] input in
             guard let self, let session else { return }
             self.relay(input, from: session)
+        }
+        session.terminalView.broadcastPeerCount = { [weak self] in
+            guard let self, self.isBroadcasting else { return 0 }
+            return self.root.leaves().count - 1
         }
         return view
     }

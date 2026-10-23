@@ -62,7 +62,7 @@ enum Placeholders {
         grid.columnSpacing = 8
         var inputs: [NSTextField] = []
         for field in fields {
-            let input = NSTextField(string: field.defaultValue)
+            let input = PlainTextField(string: field.defaultValue)
             input.placeholderString = field.name
             input.widthAnchor.constraint(equalToConstant: 240).isActive = true
             grid.addRow(with: [NSTextField(labelWithString: field.name + ":"), input])

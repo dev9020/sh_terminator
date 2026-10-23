@@ -19,6 +19,10 @@ enum UserInput {
 final class TerminalPaneView: LocalProcessTerminalView {
     var onUserInput: ((UserInput) -> Void)?
 
+    /// How many other panes broadcast would pass this pane's input on to
+    /// right now (0 when broadcast is off) — so the paste check can say so.
+    var broadcastPeerCount: (() -> Int)?
+
     private lazy var hostRequestFilter = HostRequestFilter(view: self)
     private var hostOutputFilter = HostOutputFilter()
 
@@ -47,8 +51,8 @@ final class TerminalPaneView: LocalProcessTerminalView {
     /// every program started afterwards — the shells of panes opened later
     /// and everything they run — would hold it, and could read what this
     /// pane shows and type into it.
-    func startIsolatedProcess(executable: String, args: [String] = [], execName: String? = nil, currentDirectory: String? = nil) {
-        startProcess(executable: executable, args: args, execName: execName, currentDirectory: currentDirectory)
+    func startIsolatedProcess(executable: String, args: [String] = [], environment: [String]? = nil, execName: String? = nil, currentDirectory: String? = nil) {
+        startProcess(executable: executable, args: args, environment: environment, execName: execName, currentDirectory: currentDirectory)
         let fd = process.childfd
         if fd >= 0 {
             _ = fcntl(fd, F_SETFD, FD_CLOEXEC)
@@ -91,7 +95,10 @@ final class TerminalPaneView: LocalProcessTerminalView {
     /// markers whenever the program asked for them. Broadcast
     /// repeats the same call in the other panes, so each one gets this
     /// treatment for its own program, whatever the source pane's mode was.
-    func sendPaste(_ text: String, runsLines: Bool = false) {
+    /// `relaysRunsLines` is what the other panes get for `runsLines`
+    /// (by default the same): "Paste As Is" keeps the lines for a program
+    /// that says it won't run them, which says nothing about theirs.
+    func sendPaste(_ text: String, runsLines: Bool = false, relaysRunsLines: Bool? = nil) {
         let clean = PastePolicy.strippingControlCharacters(text)
         let bracketed = getTerminal().bracketedPasteMode
         let typed = PastePolicy.typedText(clean, bracketedPaste: pasteIsBracketedByShell, runsLines: runsLines)
@@ -105,7 +112,7 @@ final class TerminalPaneView: LocalProcessTerminalView {
             send(txt: typed)
         }
         sendingPaste = false
-        onUserInput?(.paste(clean, runsLines: runsLines))
+        onUserInput?(.paste(clean, runsLines: relaysRunsLines ?? runsLines))
     }
 
     /// Shells that switch bracketed paste on themselves at every prompt
@@ -148,18 +155,27 @@ final class TerminalPaneView: LocalProcessTerminalView {
 
         case .runsLines(let count):
             let claimsBracketedPaste = getTerminal().bracketedPasteMode
+            var info = claimsBracketedPaste
+                ? "The program in this pane says it takes bracketed paste, but it isn't your zsh or fish prompt, so that can't be relied on: if the program doesn't, every line break acts as Return and runs the line before it right away."
+                : "The program in this pane doesn't use bracketed paste, so every line break acts as Return and runs the line before it right away."
+            let peers = broadcastPeerCount?() ?? 0
+            if peers > 0 {
+                let others = peers == 1 ? "the other pane" : "up to \(peers) other panes"
+                info += claimsBracketedPaste
+                    ? " Broadcast is on: in \(others) the lines are joined unless that pane's own zsh or fish prompt takes them."
+                    : " Broadcast is on: Paste and Run Lines runs the lines in \(others) too."
+            }
             confirm(
                 message: count == 1 ? "This paste ends a line" : "This paste contains \(count) line breaks",
-                info: claimsBracketedPaste
-                    ? "The program in this pane says it takes bracketed paste, but it isn't your zsh or fish prompt, so that can't be relied on: if the program doesn't, every line break acts as Return and runs the line before it right away."
-                    : "The program in this pane doesn't use bracketed paste, so every line break acts as Return and runs the line before it right away.",
+                info: info,
                 buttons: ["Paste as One Line", claimsBracketedPaste ? "Paste As Is" : "Paste and Run Lines", "Cancel"]
             ) { choice in
                 switch choice {
                 case 0:
                     self.sendPaste(PastePolicy.joiningLines(text))
                 case 1:
-                    self.sendPaste(text, runsLines: true)
+                    // "As Is" vouches only for this pane's program.
+                    self.sendPaste(text, runsLines: true, relaysRunsLines: claimsBracketedPaste ? false : nil)
                 default:
                     break
                 }

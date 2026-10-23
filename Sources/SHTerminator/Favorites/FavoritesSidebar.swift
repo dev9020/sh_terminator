@@ -13,7 +13,7 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
     var onPick: ((Favorite) -> Void)?
 
     private let tableView = NSTableView()
-    private let searchField = NSSearchField()
+    private let searchField = PlainSearchField()
     /// The favorites matching the search, with their index in the full list
     /// (which decides their ⌘1…⌘9 shortcut).
     private var visible: [(index: Int, favorite: Favorite)] = []

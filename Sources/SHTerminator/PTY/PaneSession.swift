@@ -35,11 +35,9 @@ final class PaneSession: NSObject, LocalProcessTerminalViewDelegate {
     private func startShell(in directory: String) {
         let shell = PaneSession.loginShellPath()
         let execName = "-" + (shell as NSString).lastPathComponent
-        // environment: nil lets SwiftTerm pick its own minimal default set
-        // (TERM/COLORTERM/LANG/USER/HOME/...); we never inject our own
-        // app-specific variables into the user's shell environment.
         terminalView.startIsolatedProcess(
             executable: shell,
+            environment: Self.shellEnvironment(),
             execName: execName,
             currentDirectory: directory
         )
@@ -145,6 +143,20 @@ final class PaneSession: NSObject, LocalProcessTerminalViewDelegate {
         var buffer = [UInt8](repeating: 0, count: 2 * Int(MAXCOMLEN) + 1)
         guard pid > 0, proc_name(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
         return String(decoding: buffer.prefix { $0 != 0 }, as: UTF8.self)
+    }
+
+    /// SwiftTerm's own minimal set (TERM/COLORTERM/LANG/USER/HOME/...) plus
+    /// `TMPDIR`. launchd gives every app the user's private temporary
+    /// directory (`/var/folders/…`, 0700), but no login shell sets it:
+    /// without it, the shell and everything it runs would put their
+    /// temporary files — here-docs, editor buffers — in `/tmp`, shared
+    /// with every other account on the Mac. Nothing app-specific is added.
+    nonisolated static func shellEnvironment(from environment: [String: String] = ProcessInfo.processInfo.environment) -> [String] {
+        var variables = Terminal.getEnvironmentVariables(termName: "xterm-256color")
+        if let tmpdir = environment["TMPDIR"], !tmpdir.isEmpty {
+            variables.append("TMPDIR=\(tmpdir)")
+        }
+        return variables
     }
 
     /// Reads the user's login shell from the directory service (same source
