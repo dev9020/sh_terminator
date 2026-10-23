@@ -55,6 +55,22 @@ if grep -rn "NSWorkspace.shared.open" Sources/SHTerminator | grep -v "HostReques
 fi
 ok "OSC 52 refused, links limited by LinkPolicy"
 
+# SECURITY.md §17 — the program's output reaches SwiftTerm only through HostOutputFilter.
+grep -q "super.dataReceived(slice: hostOutputFilter.filter(slice)" Sources/SHTerminator/PTY/TerminalPaneView.swift || fail "HostOutputFilter not applied to the program's output"
+if grep -rnE "\.feed\(|feed\((text|byteArray|buffer):" Sources/SHTerminator | grep -v "TerminalPaneView.swift"; then
+    fail "terminal fed outside TerminalPaneView.feedLocally (bypasses HostOutputFilter)"
+fi
+swiftterm=$(sed -n 's/.*migueldeicaza\/SwiftTerm", exact: "\([0-9.]*\)".*/\1/p' Package.swift)
+grep -q "SwiftTerm ${swiftterm})" Sources/SHTerminator/Security/HostOutputFilter.swift || fail "SwiftTerm is ${swiftterm} but HostOutputFilter mirrors another version's parser — re-check it"
+ok "program output filtered against SwiftTerm ${swiftterm}'s parser"
+
+# SECURITY.md §9 — a pane's pty is never inherited by later panes' shells.
+grep -q "fcntl(fd, F_SETFD, FD_CLOEXEC)" Sources/SHTerminator/PTY/TerminalPaneView.swift || fail "pty not marked close-on-exec"
+if grep -rn "startProcess(" Sources/SHTerminator | grep -v "TerminalPaneView.swift"; then
+    fail "process started outside TerminalPaneView.startIsolatedProcess"
+fi
+ok "panes' ptys close-on-exec"
+
 # SECURITY.md §1 — commands are not shown in tooltips (captured by screenshots).
 if grep -rn "toolTip = favorite" Sources/SHTerminator; then
     fail "favorite shown in a tooltip"

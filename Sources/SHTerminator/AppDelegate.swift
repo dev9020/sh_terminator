@@ -9,7 +9,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private lazy var favoritesWindow = FavoritesWindowController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        SecurityHardening.hardenProcess()
         let favoritesMenu = FavoritesMenu(appDelegate: self)
         self.favoritesMenu = favoritesMenu
         NSApp.mainMenu = MainMenuBuilder.build(appDelegate: self, favoritesMenu: favoritesMenu.menu)
@@ -160,10 +159,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case #selector(lockNow(_:)):
             return PrivacyLock.shared.state != .locked
         default:
-            // Opening windows or favorites would show content past the lock.
-            return !PrivacyLock.shared.isEngaged
+            break
         }
-        return true
+        // Opening windows or favorites would show content past the lock, and
+        // the settings above must not be weakened (or the notes deleted)
+        // by whoever is at the Mac while it is locked.
+        return !PrivacyLock.shared.isEngaged
     }
 }
 

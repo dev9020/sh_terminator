@@ -13,12 +13,14 @@ enum UserInput {
 }
 
 /// SwiftTerm's view plus what this app needs around it: a guarded ⌘V (see
-/// `PastePolicy`), a tap on everything the user sends, and a filter on what
-/// the program in the pane may ask of the terminal (see `HostRequestFilter`).
+/// `PastePolicy`), a tap on everything the user sends, and filters on what
+/// the program in the pane may ask of the terminal (see `HostRequestFilter`
+/// and `HostOutputFilter`).
 final class TerminalPaneView: LocalProcessTerminalView {
     var onUserInput: ((UserInput) -> Void)?
 
     private lazy var hostRequestFilter = HostRequestFilter(view: self)
+    private var hostOutputFilter = HostOutputFilter()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -38,6 +40,36 @@ final class TerminalPaneView: LocalProcessTerminalView {
     private static let bracketedPasteStart: [UInt8] = Array("\u{1b}[200~".utf8)
     private static let bracketedPasteEnd: [UInt8] = Array("\u{1b}[201~".utf8)
 
+    // MARK: - Process
+
+    /// Starts the pane's program. SwiftTerm opens the pty with `forkpty`,
+    /// which leaves this end of it inheritable: without close-on-exec,
+    /// every program started afterwards — the shells of panes opened later
+    /// and everything they run — would hold it, and could read what this
+    /// pane shows and type into it.
+    func startIsolatedProcess(executable: String, args: [String] = [], execName: String? = nil, currentDirectory: String? = nil) {
+        startProcess(executable: executable, args: args, execName: execName, currentDirectory: currentDirectory)
+        let fd = process.childfd
+        if fd >= 0 {
+            _ = fcntl(fd, F_SETFD, FD_CLOEXEC)
+        }
+    }
+
+    // MARK: - Output
+
+    /// Everything the program writes passes `HostOutputFilter` before
+    /// SwiftTerm interprets it.
+    override func dataReceived(slice: ArraySlice<UInt8>) {
+        super.dataReceived(slice: hostOutputFilter.filter(slice)[...])
+    }
+
+    /// Escape sequences the app itself draws with. They go through the same
+    /// filter, so it stays in step with SwiftTerm's parser (a sequence the
+    /// program left open would otherwise be ended here, unchecked).
+    func feedLocally(_ text: String) {
+        dataReceived(slice: Array(text.utf8)[...])
+    }
+
     override func send(source: Terminal, data: ArraySlice<UInt8>) {
         sendingTerminalReply = true
         defer { sendingTerminalReply = false }
@@ -54,14 +86,15 @@ final class TerminalPaneView: LocalProcessTerminalView {
     /// Types `text` as a paste, made safe for the program in this pane:
     /// control characters are always dropped (an ESC could end a bracketed
     /// paste early), and line breaks never act as Return unless `runsLines`
-    /// — the text is wrapped in bracketed-paste markers when the program
-    /// asked for them, otherwise its lines are joined with spaces. Broadcast
+    /// — they are kept only when `pasteIsBracketedByShell`, otherwise the
+    /// lines are joined with spaces. The text is wrapped in bracketed-paste
+    /// markers whenever the program asked for them. Broadcast
     /// repeats the same call in the other panes, so each one gets this
     /// treatment for its own program, whatever the source pane's mode was.
     func sendPaste(_ text: String, runsLines: Bool = false) {
         let clean = PastePolicy.strippingControlCharacters(text)
         let bracketed = getTerminal().bracketedPasteMode
-        let typed = PastePolicy.typedText(clean, bracketedPaste: bracketed, runsLines: runsLines)
+        let typed = PastePolicy.typedText(clean, bracketedPaste: pasteIsBracketedByShell, runsLines: runsLines)
         guard !typed.isEmpty else { return }
         sendingPaste = true
         if bracketed {
@@ -75,6 +108,23 @@ final class TerminalPaneView: LocalProcessTerminalView {
         onUserInput?(.paste(clean, runsLines: runsLines))
     }
 
+    /// Shells that switch bracketed paste on themselves at every prompt
+    /// and take a pasted line break as text.
+    private static let bracketedPasteShells: Set<String> = ["zsh", "fish"]
+
+    /// Whether line breaks in a bracketed paste will really stay text: the
+    /// program asked for bracketed paste *and* it is the pane's own shell,
+    /// zsh or fish, at its prompt. The mode is only a flag that any program
+    /// — or any output, such as a `cat`-ed file or a remote host's login
+    /// banner — can switch on; a program that does without honouring it
+    /// (`sh`, macOS's bash 3.2, many REPLs) would run every pasted line.
+    var pasteIsBracketedByShell: Bool {
+        guard getTerminal().bracketedPasteMode, let process, process.running, process.childfd >= 0 else { return false }
+        let group = tcgetpgrp(process.childfd)
+        guard group > 0, group == process.shellPid, let name = PaneSession.processName(group) else { return false }
+        return Self.bracketedPasteShells.contains(name)
+    }
+
     // MARK: - Guarded paste
 
     override func paste(_ sender: Any) {
@@ -83,7 +133,7 @@ final class TerminalPaneView: LocalProcessTerminalView {
     }
 
     private func pasteAfterCheck(_ text: String) {
-        switch PastePolicy.concern(for: text, bracketedPaste: getTerminal().bracketedPasteMode) {
+        switch PastePolicy.concern(for: text, bracketedPaste: pasteIsBracketedByShell) {
         case nil:
             sendPaste(text)
 
@@ -97,10 +147,13 @@ final class TerminalPaneView: LocalProcessTerminalView {
             }
 
         case .runsLines(let count):
+            let claimsBracketedPaste = getTerminal().bracketedPasteMode
             confirm(
                 message: count == 1 ? "This paste ends a line" : "This paste contains \(count) line breaks",
-                info: "The program in this pane doesn't use bracketed paste, so every line break acts as Return and runs the line before it right away.",
-                buttons: ["Paste as One Line", "Paste and Run Lines", "Cancel"]
+                info: claimsBracketedPaste
+                    ? "The program in this pane says it takes bracketed paste, but it isn't your zsh or fish prompt, so that can't be relied on: if the program doesn't, every line break acts as Return and runs the line before it right away."
+                    : "The program in this pane doesn't use bracketed paste, so every line break acts as Return and runs the line before it right away.",
+                buttons: ["Paste as One Line", claimsBracketedPaste ? "Paste As Is" : "Paste and Run Lines", "Cancel"]
             ) { choice in
                 switch choice {
                 case 0:

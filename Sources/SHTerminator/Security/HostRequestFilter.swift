@@ -23,7 +23,8 @@ enum LinkPolicy {
 /// - **Clipboard (OSC 52)**: reading is refused (the program would get
 ///   whatever is on the clipboard, e.g. a password just copied), and so is
 ///   writing (it could swap in a command for the user to paste elsewhere).
-/// - **Links**: opened only per `LinkPolicy`.
+/// - **Links**: opened only per `LinkPolicy`, and only after the user saw
+///   where they really go.
 /// Everything else is passed on unchanged.
 ///
 /// `LocalProcessTerminalView` implements these as non-`open` methods, so
@@ -43,12 +44,36 @@ final class HostRequestFilter: @preconcurrency TerminalViewDelegate {
 
     func clipboardCopy(source: TerminalView, content: Data) {}
 
+    /// Longest destination shown in the confirmation, in characters.
+    nonisolated static let maxShownLinkLength = 1000
+
+    /// With OSC 8 the program picks the text shown for a link and, apart
+    /// from it, where it goes — so the real destination is shown, in a sheet
+    /// on this pane's window, before anything is opened.
     func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
-        guard let url = LinkPolicy.url(for: link) else {
+        guard let url = LinkPolicy.url(for: link), let window = view.window else {
             NSSound.beep()
             return
         }
-        NSWorkspace.shared.open(url)
+        let alert = NSAlert()
+        alert.messageText = "Open this link?"
+        alert.informativeText = Self.shownDestination(url)
+        alert.addButton(withTitle: "Open")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons.last?.keyEquivalent = "\u{1b}"
+        alert.window.sharingType = .none
+        alert.beginSheetModal(for: window) { response in
+            // Locking cancels the sheet (see PaneWindowController.privacyLockDidChange).
+            guard response == .alertFirstButtonReturn, !PrivacyLock.shared.isEngaged else { return }
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    /// `url` as text, cut to `maxShownLinkLength`. `absoluteString` is
+    /// percent-encoded, so no character in it can hide or reorder the rest.
+    nonisolated static func shownDestination(_ url: URL) -> String {
+        let text = url.absoluteString
+        return text.count > maxShownLinkLength ? text.prefix(maxShownLinkLength) + "…" : text
     }
 
     // MARK: - Passed through

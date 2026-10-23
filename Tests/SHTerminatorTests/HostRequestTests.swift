@@ -16,6 +16,16 @@ import Testing
         #expect(LinkPolicy.url(for: "x-apple.systempreferences:com.apple.preference.security") == nil)
         #expect(LinkPolicy.url(for: "ssh://evil.example") == nil)
     }
+
+    @Test func shownDestinationCannotHideOrReorderAnything() throws {
+        // A right-to-left override would make the end of the link read first.
+        let url = try #require(LinkPolicy.url(for: "https://example.com/\u{202E}gpj.exe"))
+        let shown = HostRequestFilter.shownDestination(url)
+        #expect(shown.unicodeScalars.allSatisfy { $0.isASCII && $0.value >= 0x20 })
+
+        let long = try #require(LinkPolicy.url(for: "https://example.com/" + String(repeating: "a", count: 5000)))
+        #expect(HostRequestFilter.shownDestination(long).count == HostRequestFilter.maxShownLinkLength + 1)
+    }
 }
 
 @Suite struct HostRequestFilterTests {
@@ -35,6 +45,11 @@ import Testing
 @Suite struct PaneTitleTests {
     @Test func controlAndBidiCharactersAreDropped() {
         #expect(PaneSession.displayTitle("vim\u{1b}[31m\nnotes\u{202E}txt.exe") == "vim[31mnotestxt.exe")
+    }
+
+    @Test func invisibleCharactersAreDropped() {
+        // Zero-width space and joiner, word joiner, BOM, a tag character.
+        #expect(PaneSession.displayTitle("ssh\u{200B} pr\u{200D}od\u{2060}\u{FEFF}\u{E0041}") == "ssh prod")
     }
 
     @Test func emptyAfterCleanupMeansNoTitle() {

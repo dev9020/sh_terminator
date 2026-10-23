@@ -38,7 +38,7 @@ final class PaneSession: NSObject, LocalProcessTerminalViewDelegate {
         // environment: nil lets SwiftTerm pick its own minimal default set
         // (TERM/COLORTERM/LANG/USER/HOME/...); we never inject our own
         // app-specific variables into the user's shell environment.
-        terminalView.startProcess(
+        terminalView.startIsolatedProcess(
             executable: shell,
             execName: execName,
             currentDirectory: directory
@@ -46,12 +46,12 @@ final class PaneSession: NSObject, LocalProcessTerminalViewDelegate {
     }
 
     /// Types `text` at the shell prompt without running it: trailing line
-    /// breaks are dropped, control characters too, and the text goes in as a
-    /// bracketed paste when the shell supports it (zsh/bash/fish do), so even
-    /// an embedded newline can't submit the line. If the program in the pane
-    /// hasn't enabled bracketed paste, inner line breaks are turned into
-    /// spaces instead (see `TerminalPaneView.sendPaste`) — in every pane it
-    /// reaches by broadcast as well.
+    /// breaks are dropped, control characters too, and inner line breaks
+    /// are kept only where the pane's own zsh or fish prompt takes the text
+    /// as a bracketed paste (see `TerminalPaneView.pasteIsBracketedByShell`);
+    /// anywhere else they are turned into spaces (see
+    /// `TerminalPaneView.sendPaste`) — in every pane it reaches by broadcast
+    /// as well.
     func insertWithoutRunning(_ text: String) {
         var text = text
         while let last = text.last, last.isNewline || last.isWhitespace { text.removeLast() }
@@ -81,7 +81,7 @@ final class PaneSession: NSObject, LocalProcessTerminalViewDelegate {
             if cursor.y > 0 {
                 // Cursor home, delete the lines above the cursor line (which
                 // moves it up to row 1), put the cursor back in its column.
-                terminalView.feed(text: "\u{1b}[H\u{1b}[\(cursor.y)M\u{1b}[1;\(cursor.x + 1)H")
+                terminalView.feedLocally("\u{1b}[H\u{1b}[\(cursor.y)M\u{1b}[1;\(cursor.x + 1)H")
             }
         }
         terminal.clearScrollback()
@@ -141,7 +141,7 @@ final class PaneSession: NSObject, LocalProcessTerminalViewDelegate {
         return attributes.c_lflag & tcflag_t(ECHO) == 0
     }
 
-    private static func processName(_ pid: pid_t) -> String? {
+    nonisolated static func processName(_ pid: pid_t) -> String? {
         var buffer = [UInt8](repeating: 0, count: 2 * Int(MAXCOMLEN) + 1)
         guard pid > 0, proc_name(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
         return String(decoding: buffer.prefix { $0 != 0 }, as: UTF8.self)
@@ -173,12 +173,16 @@ final class PaneSession: NSObject, LocalProcessTerminalViewDelegate {
 
     /// A title set by the program (which may be on a remote host) made fit
     /// for display: no control characters or line breaks, no bidi overrides
-    /// that would reorder what is shown, at most `maxTitleLength` characters.
+    /// that would reorder what is shown, no invisible characters (zero-width
+    /// spaces and joiners, tag characters…) that would make two titles look
+    /// alike, at most `maxTitleLength` characters.
     nonisolated static func displayTitle(_ title: String) -> String? {
         var scalars = String.UnicodeScalarView()
         scalars.append(contentsOf: title.unicodeScalars.filter { scalar in
             !(PastePolicy.isDisallowedControl(scalar)
                 || scalar.properties.isBidiControl
+                || scalar.properties.isDefaultIgnorableCodePoint
+                || scalar.properties.generalCategory == .format
                 || scalar.properties.isNoncharacterCodePoint
                 || [0x09, 0x0A, 0x0D].contains(scalar.value))
         })
