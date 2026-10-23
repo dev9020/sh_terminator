@@ -41,6 +41,18 @@ import Testing
         // No temp files left behind.
         #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path) == ["notes.txt"])
     }
+
+    @Test @MainActor func tightensAnExistingDirectory() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("shterminator-tests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o755])
+
+        try SecurityHardening.writePrivateFile(Data("x".utf8), to: dir.appendingPathComponent("favorites.json"))
+
+        let dirMode = try FileManager.default.attributesOfItem(atPath: dir.path)[.posixPermissions] as? Int
+        #expect(dirMode == 0o700)
+    }
 }
 
 @Suite struct RunningProgramsTests {

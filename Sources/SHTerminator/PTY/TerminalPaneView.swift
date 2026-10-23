@@ -6,15 +6,28 @@ import SwiftTerm
 enum UserInput {
     /// Typed keys, already encoded for the program in the pane.
     case bytes(ArraySlice<UInt8>)
-    /// Pasted text, before bracketed-paste wrapping — each receiving pane
-    /// wraps it according to its own program's mode.
-    case paste(String)
+    /// Pasted text, with control characters already dropped but before
+    /// bracketed-paste wrapping or line joining — each receiving pane applies
+    /// those for its own program (see `TerminalPaneView.sendPaste`).
+    case paste(String, runsLines: Bool)
 }
 
-/// SwiftTerm's view plus the two things this app needs at the input side:
-/// a guarded ⌘V (see `PastePolicy`) and a tap on everything the user sends.
+/// SwiftTerm's view plus what this app needs around it: a guarded ⌘V (see
+/// `PastePolicy`), a tap on everything the user sends, and a filter on what
+/// the program in the pane may ask of the terminal (see `HostRequestFilter`).
 final class TerminalPaneView: LocalProcessTerminalView {
     var onUserInput: ((UserInput) -> Void)?
+
+    private lazy var hostRequestFilter = HostRequestFilter(view: self)
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        terminalDelegate = hostRequestFilter
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not used")
+    }
 
     /// Set while the terminal emulator itself answers the program (cursor
     /// position reports, device attributes, …) — those replies go through
@@ -38,21 +51,28 @@ final class TerminalPaneView: LocalProcessTerminalView {
         }
     }
 
-    /// Types `text` as a paste: wrapped in bracketed-paste markers when the
-    /// program in the pane asked for them, as plain keystrokes otherwise.
-    /// No checks — callers decide what is safe to send.
-    func sendPaste(_ text: String) {
-        guard !text.isEmpty else { return }
+    /// Types `text` as a paste, made safe for the program in this pane:
+    /// control characters are always dropped (an ESC could end a bracketed
+    /// paste early), and line breaks never act as Return unless `runsLines`
+    /// — the text is wrapped in bracketed-paste markers when the program
+    /// asked for them, otherwise its lines are joined with spaces. Broadcast
+    /// repeats the same call in the other panes, so each one gets this
+    /// treatment for its own program, whatever the source pane's mode was.
+    func sendPaste(_ text: String, runsLines: Bool = false) {
+        let clean = PastePolicy.strippingControlCharacters(text)
+        let bracketed = getTerminal().bracketedPasteMode
+        let typed = PastePolicy.typedText(clean, bracketedPaste: bracketed, runsLines: runsLines)
+        guard !typed.isEmpty else { return }
         sendingPaste = true
-        if getTerminal().bracketedPasteMode {
+        if bracketed {
             send(data: Self.bracketedPasteStart[...])
-            send(txt: text)
+            send(txt: typed)
             send(data: Self.bracketedPasteEnd[...])
         } else {
-            send(txt: text)
+            send(txt: typed)
         }
         sendingPaste = false
-        onUserInput?(.paste(text))
+        onUserInput?(.paste(clean, runsLines: runsLines))
     }
 
     // MARK: - Guarded paste
@@ -84,12 +104,9 @@ final class TerminalPaneView: LocalProcessTerminalView {
             ) { choice in
                 switch choice {
                 case 0:
-                    let oneLine = text
-                        .split(omittingEmptySubsequences: true, whereSeparator: \.isNewline)
-                        .joined(separator: " ")
-                    self.sendPaste(oneLine)
+                    self.sendPaste(PastePolicy.joiningLines(text))
                 case 1:
-                    self.sendPaste(text)
+                    self.sendPaste(text, runsLines: true)
                 default:
                     break
                 }
@@ -100,7 +117,9 @@ final class TerminalPaneView: LocalProcessTerminalView {
     /// Asks as a sheet on this pane's window; `completion` gets the index of
     /// the button clicked. The first button is the default (Return), the
     /// last one is Cancel (Escape). The clipboard text itself is never shown:
-    /// it may be a secret, and the alert is a separate window.
+    /// it may be a secret, and the alert is a separate window. If the windows
+    /// got locked meanwhile, nothing is pasted (locking also cancels the
+    /// sheet, see `PaneWindowController.privacyLockDidChange`).
     private func confirm(message: String, info: String, buttons: [String], completion: @escaping (Int) -> Void) {
         guard let window else { return }
         let alert = NSAlert()
@@ -111,6 +130,7 @@ final class TerminalPaneView: LocalProcessTerminalView {
         alert.buttons.last?.keyEquivalent = "\u{1b}"
         alert.window.sharingType = .none
         alert.beginSheetModal(for: window) { response in
+            guard !PrivacyLock.shared.isEngaged else { return }
             completion(response.rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue)
             window.makeFirstResponder(self)
         }

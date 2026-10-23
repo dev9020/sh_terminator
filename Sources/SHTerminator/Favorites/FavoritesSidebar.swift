@@ -164,7 +164,8 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
         let (index, favorite) = visible[row]
         cell.nameLabel.stringValue = index < 9 ? "\(favorite.name)  ⌘\(index + 1)" : favorite.name
         cell.commandLabel.stringValue = favorite.command
-        cell.toolTip = favorite.command
+        // No tooltip with the command: the tooltip is a separate window
+        // that, unlike this one, screenshots and screen sharing capture.
         return cell
     }
 }

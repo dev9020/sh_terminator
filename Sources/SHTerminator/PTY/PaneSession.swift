@@ -15,8 +15,12 @@ final class PaneSession: NSObject, LocalProcessTerminalViewDelegate {
     /// Called when the program in the pane sets the title (OSC 0/2).
     var onTitleChange: (() -> Void)?
 
-    /// The title the program in the pane set last, if any.
+    /// The title the program in the pane set last, if any (cleaned up by
+    /// `displayTitle(_:)`).
     private(set) var programTitle: String?
+
+    /// Longest program title kept, in characters.
+    nonisolated static let maxTitleLength = 200
 
     /// `currentDirectory` is where the new shell starts — normally the
     /// directory of the pane being split; the home directory if nil.
@@ -42,18 +46,15 @@ final class PaneSession: NSObject, LocalProcessTerminalViewDelegate {
     }
 
     /// Types `text` at the shell prompt without running it: trailing line
-    /// breaks are dropped, and the text goes in as a bracketed paste when the
-    /// shell supports it (zsh/bash/fish do), so even an embedded newline
-    /// can't submit the line. If the program in the pane hasn't enabled
-    /// bracketed paste, inner line breaks are turned into spaces instead.
+    /// breaks are dropped, control characters too, and the text goes in as a
+    /// bracketed paste when the shell supports it (zsh/bash/fish do), so even
+    /// an embedded newline can't submit the line. If the program in the pane
+    /// hasn't enabled bracketed paste, inner line breaks are turned into
+    /// spaces instead (see `TerminalPaneView.sendPaste`) — in every pane it
+    /// reaches by broadcast as well.
     func insertWithoutRunning(_ text: String) {
         var text = text
         while let last = text.last, last.isNewline || last.isWhitespace { text.removeLast() }
-        guard !text.isEmpty else { return }
-
-        if !terminalView.getTerminal().bracketedPasteMode {
-            text = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).joined(separator: " ")
-        }
         terminalView.sendPaste(text)
     }
 
@@ -128,6 +129,18 @@ final class PaneSession: NSObject, LocalProcessTerminalViewDelegate {
         foregroundProgramName ?? Self.processName(terminalView.process.shellPid) ?? "shell"
     }
 
+    /// Whether the pane's terminal doesn't echo what is typed right now —
+    /// normally a password prompt (`sudo`, `ssh`, `gpg`…), but also any
+    /// full-screen program (vim, less…). A pane running `ssh` always looks
+    /// like this: ssh turns local echo off and lets the remote side echo.
+    var isEchoOff: Bool {
+        let process = terminalView.process!
+        guard process.running, process.childfd >= 0 else { return false }
+        var attributes = termios()
+        guard tcgetattr(process.childfd, &attributes) == 0 else { return false }
+        return attributes.c_lflag & tcflag_t(ECHO) == 0
+    }
+
     private static func processName(_ pid: pid_t) -> String? {
         var buffer = [UInt8](repeating: 0, count: 2 * Int(MAXCOMLEN) + 1)
         guard pid > 0, proc_name(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
@@ -158,9 +171,25 @@ final class PaneSession: NSObject, LocalProcessTerminalViewDelegate {
 
     nonisolated func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
 
+    /// A title set by the program (which may be on a remote host) made fit
+    /// for display: no control characters or line breaks, no bidi overrides
+    /// that would reorder what is shown, at most `maxTitleLength` characters.
+    nonisolated static func displayTitle(_ title: String) -> String? {
+        var scalars = String.UnicodeScalarView()
+        scalars.append(contentsOf: title.unicodeScalars.filter { scalar in
+            !(PastePolicy.isDisallowedControl(scalar)
+                || scalar.properties.isBidiControl
+                || scalar.properties.isNoncharacterCodePoint
+                || [0x09, 0x0A, 0x0D].contains(scalar.value))
+        })
+        let clean = String(String(scalars).prefix(maxTitleLength)).trimmingCharacters(in: .whitespaces)
+        return clean.isEmpty ? nil : clean
+    }
+
     nonisolated func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
+        let title = Self.displayTitle(title)
         Task { @MainActor in
-            self.programTitle = title.isEmpty ? nil : title
+            self.programTitle = title
             self.onTitleChange?()
         }
     }

@@ -16,7 +16,7 @@ ok() {
 }
 
 # SECURITY.md §4 — no networking APIs in the app's own code.
-if grep -rnE "URLSession|import Network|CFNetwork|NSURLConnection|CFStream|socket\(" Sources/SHTerminator; then
+if grep -rnE "URLSession|import Network|CFNetwork|NSURLConnection|NSURLDownload|CFStream|CFSocket|socket\(|connect\(|getaddrinfo|gethostbyname|WKWebView|WebKit|Data\(contentsOf: *URL\(string" Sources/SHTerminator; then
     fail "networking API used in Sources/SHTerminator"
 fi
 ok "no networking APIs in app code"
@@ -41,10 +41,25 @@ grep -q "EnableSecureEventInput" Sources/SHTerminator/Security/SecurityHardening
 ok "hardening calls present"
 
 # Files written to disk only through the 0600 helper.
-if grep -rnE "\.write\(to:|createFile\(atPath" Sources/SHTerminator | grep -v "SecurityHardening.swift"; then
+if grep -rnE "\.write\(to:|\.write\(toFile:|\.write\(toURL:|createFile\(atPath|FileHandle\((forWriting|forUpdating)|fopen\(|freopen\(|O_CREAT|O_WRONLY|O_RDWR|copyItem\(|NSKeyedArchiver|setHostLogging" Sources/SHTerminator | grep -v "SecurityHardening.swift"; then
     fail "file written outside SecurityHardening.writePrivateFile"
 fi
 ok "all file writes go through writePrivateFile"
+
+# SECURITY.md §17 — what a program in a pane may ask of the terminal.
+grep -q "terminalDelegate = hostRequestFilter" Sources/SHTerminator/PTY/TerminalPaneView.swift || fail "HostRequestFilter not installed on TerminalPaneView"
+grep -A1 "func clipboardRead" Sources/SHTerminator/Security/HostRequestFilter.swift | grep -qx "        nil" || fail "OSC 52 clipboard read is not refused"
+grep -qE "func clipboardCopy\(.*\) \{\}" Sources/SHTerminator/Security/HostRequestFilter.swift || fail "OSC 52 clipboard write is not refused"
+if grep -rn "NSWorkspace.shared.open" Sources/SHTerminator | grep -v "HostRequestFilter.swift"; then
+    fail "URL opened outside LinkPolicy"
+fi
+ok "OSC 52 refused, links limited by LinkPolicy"
+
+# SECURITY.md §1 — commands are not shown in tooltips (captured by screenshots).
+if grep -rn "toolTip = favorite" Sources/SHTerminator; then
+    fail "favorite shown in a tooltip"
+fi
+ok "no favorites in tooltips"
 
 if [ -d dist/SHTerminator.app ]; then
     codesign --verify --strict dist/SHTerminator.app || fail "signature does not verify"

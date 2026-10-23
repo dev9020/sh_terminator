@@ -18,7 +18,7 @@ final class SplitPaneController: NSObject {
     private var headerTimer: Timer?
 
     /// When on, whatever is typed or pasted into one pane of this window is
-    /// sent to every other pane of it too.
+    /// sent to every other pane of it too — with two safeguards, see `relay`.
     private(set) var isBroadcasting = false
     private var isRelayingBroadcast = false
 
@@ -168,16 +168,26 @@ final class SplitPaneController: NSObject {
         updatePaneHeaders()
     }
 
+    /// - Pastes go through each pane's own `sendPaste`, so whether a line
+    ///   break can act as Return is decided by the program in *that* pane,
+    ///   not the one the user pasted into.
+    /// - Keys typed while the source pane doesn't echo (a password prompt)
+    ///   only reach panes that don't echo either — a `sudo` password typed
+    ///   once for every pane still works, but it is never typed in clear
+    ///   at another pane's shell prompt (and into its history).
     private func relay(_ input: UserInput, from source: PaneSession) {
         guard isBroadcasting, !isRelayingBroadcast else { return }
         isRelayingBroadcast = true
         defer { isRelayingBroadcast = false }
+        let sourceHidesInput: Bool
+        if case .bytes = input { sourceHidesInput = source.isEchoOff } else { sourceHidesInput = false }
         for session in root.leaves() where session !== source {
             switch input {
             case .bytes(let data):
+                if sourceHidesInput && !session.isEchoOff { continue }
                 session.terminalView.send(data: data)
-            case .paste(let text):
-                session.terminalView.sendPaste(text)
+            case .paste(let text, let runsLines):
+                session.terminalView.sendPaste(text, runsLines: runsLines)
             }
         }
     }

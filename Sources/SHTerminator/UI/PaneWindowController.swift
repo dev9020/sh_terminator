@@ -12,6 +12,8 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Set once the user agreed to close despite running programs, so the
     /// second `windowShouldClose` lets it through.
     private var closeConfirmed = false
+    /// The focused pane's header text, for `updateWindowTitle`.
+    private var focusedPaneTitle = ""
 
     private static let sidebarWidth: CGFloat = 130
     private static let baseTitle = "sh_terminator"
@@ -54,8 +56,9 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         splitController.onEmptied = { [weak self] in
             self?.close()
         }
-        splitController.onFocusedTitleChange = { [weak window] title in
-            window?.title = title.isEmpty ? Self.baseTitle : title
+        splitController.onFocusedTitleChange = { [weak self] title in
+            self?.focusedPaneTitle = title
+            self?.updateWindowTitle()
         }
         favoritesSidebar.onPick = { [weak self] favorite in
             self?.insert(command: favorite.command)
@@ -73,6 +76,7 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         }
 
         NotificationCenter.default.addObserver(self, selector: #selector(privacyLockDidChange(_:)), name: PrivacyLock.didChange, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(settingsDidChange(_:)), name: AppSettings.didChange, object: nil)
         privacyLockDidChange(nil)
     }
 
@@ -97,15 +101,34 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         splitController.applyFontSize()
     }
 
+    /// The window title is visible outside the window (Dock menu, Mission
+    /// Control, Accessibility, other apps' window lists), so it repeats the
+    /// pane's title only if the user asked for that, and never while locked.
+    private func updateWindowTitle() {
+        let showPane = AppSettings.paneTitleInWindowTitle && !PrivacyLock.shared.isEngaged && !focusedPaneTitle.isEmpty
+        window?.title = showPane ? focusedPaneTitle : Self.baseTitle
+    }
+
+    @objc private func settingsDidChange(_ notification: Notification) {
+        updateWindowTitle()
+    }
+
     // MARK: - Privacy lock
 
     /// While locked or covered, the panes and sidebar are taken out of the
     /// window entirely — nothing typed, clicked or sent from a menu can reach
-    /// a shell — and put back when it lifts.
+    /// a shell — and put back when it lifts. A sheet still open on the window
+    /// (paste check, placeholders, close confirmation) would stay on top of
+    /// the lock screen showing its text and taking Return, so it is
+    /// cancelled.
     @objc private func privacyLockDidChange(_ notification: Notification?) {
         guard let window else { return }
         let lock = PrivacyLock.shared
+        updateWindowTitle()
         if lock.isEngaged {
+            if let sheet = window.attachedSheet {
+                window.endSheet(sheet, returnCode: .cancel)
+            }
             lockScreen.update(for: lock.state)
             if window.contentView !== lockScreen {
                 window.contentView = lockScreen

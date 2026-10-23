@@ -86,12 +86,15 @@ enum SecurityHardening {
     // MARK: - Private files
 
     /// Atomically replaces `url` with `data`, created owner-only (0600) from
-    /// the first byte, in a directory created 0700. Unlike
+    /// the first byte, in a directory that is (made) 0700. Unlike
     /// `Data.write(options: .atomic)` followed by `chmod`, there's no moment
     /// where the file exists with the default, group/world-readable mode.
     static func writePrivateFile(_ data: Data, to url: URL) throws {
         let dir = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        // The mode above only applies to a directory created just now; an
+        // existing one (older build, made by hand) is tightened here.
+        guard chmod(dir.path, 0o700) == 0 else { throw posixError() }
 
         let temp = dir.appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString).tmp")
         let fd = open(temp.path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0o600)

@@ -48,7 +48,9 @@ enum MainMenuBuilder {
         let autoLockItem = NSMenuItem(title: "Auto-Lock", action: nil, keyEquivalent: "")
         autoLockItem.submenu = autoLockMenu
         appMenu.addItem(autoLockItem)
+        appMenu.addItem(item("Lock When Mac Sleeps or Screen Locks", #selector(AppDelegate.toggleLockOnSleep(_:)), "", target: appDelegate))
         appMenu.addItem(item("Hide Windows When in Background", #selector(AppDelegate.toggleHideWhenInactive(_:)), "", target: appDelegate))
+        appMenu.addItem(item("Show Pane Title in Window Title", #selector(AppDelegate.togglePaneTitleInWindowTitle(_:)), "", target: appDelegate))
         appMenu.addItem(item("Keep Notes Across Restarts", #selector(AppDelegate.togglePersistNotes(_:)), "", target: appDelegate))
         appMenu.addItem(.separator())
         appMenu.addItem(item("Quit \(appName)", #selector(NSApplication.terminate(_:)), "q"))

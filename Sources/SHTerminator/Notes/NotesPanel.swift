@@ -7,8 +7,8 @@ import AppKit
 final class NotesPanel: NSObject, NSTextViewDelegate {
     let view = NSView()
 
-    private let scrollView = NSTextView.scrollableTextView()
-    private var textView: NSTextView { scrollView.documentView as! NSTextView }
+    private let scrollView = NSScrollView()
+    private let textView = NotesTextView()
 
     override init() {
         super.init()
@@ -59,7 +59,16 @@ final class NotesPanel: NSObject, NSTextViewDelegate {
         header.spacing = 6
         header.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 10)
 
-        let textView = self.textView
+        textView.minSize = .zero
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
+        textView.textContainer?.widthTracksTextView = true
+        scrollView.documentView = textView
+        scrollView.hasVerticalScroller = true
+
         textView.delegate = self
         textView.isRichText = false
         textView.importsGraphics = false
@@ -78,6 +87,11 @@ final class NotesPanel: NSObject, NSTextViewDelegate {
         textView.isAutomaticLinkDetectionEnabled = false
         textView.isAutomaticDataDetectionEnabled = false
         textView.smartInsertDeleteEnabled = false
+        // Nor Writing Tools (Apple Intelligence), which would offer to send
+        // the text off for rewriting.
+        if #available(macOS 15.0, *) {
+            textView.writingToolsBehavior = .none
+        }
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = true
         textView.backgroundColor = NSColor.textBackgroundColor.withAlphaComponent(0.5)
@@ -105,5 +119,26 @@ final class NotesPanel: NSObject, NSTextViewDelegate {
         button.toolTip = tip
         button.refusesFirstResponder = true
         return button
+    }
+}
+
+/// The notes' text view, kept to plain editing: no Services (which hand the
+/// selection to other apps) and a context menu with only Cut, Copy, Paste
+/// and Select All — no Look Up, Translate, Share, Speech or Writing Tools.
+private final class NotesTextView: NSTextView {
+    private static let contextActions: Set<Selector> = [
+        #selector(cut(_:)), #selector(copy(_:)), #selector(paste(_:)), #selector(selectAll(_:)),
+    ]
+
+    override func validRequestor(forSendType sendType: NSPasteboard.PasteboardType?, returnType: NSPasteboard.PasteboardType?) -> Any? {
+        nil
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard let menu = super.menu(for: event) else { return nil }
+        for item in menu.items where !(item.action.map(Self.contextActions.contains) ?? false) {
+            menu.removeItem(item)
+        }
+        return menu.items.isEmpty ? nil : menu
     }
 }

@@ -33,7 +33,8 @@ final class FavoritesMenu: NSObject {
             let item = NSMenuItem(title: favorite.name, action: #selector(PaneWindowController.insertFavorite(_:)), keyEquivalent: key)
             item.keyEquivalentModifierMask = [.command]
             item.representedObject = favorite.id
-            item.toolTip = favorite.command
+            // No tooltip with the command: tooltips (like menus) are
+            // separate windows that screenshots and screen sharing capture.
             menu.addItem(item)
         }
 

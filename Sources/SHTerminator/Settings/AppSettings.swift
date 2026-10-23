@@ -14,6 +14,8 @@ enum AppSettings {
         static let secureKeyboardEntry = "secureKeyboardEntry"
         static let autoLockMinutes = "autoLockMinutes"
         static let hideWhenInactive = "hideWhenInactive"
+        static let lockOnSleep = "lockOnSleep"
+        static let paneTitleInWindowTitle = "paneTitleInWindowTitle"
         static let persistNotes = "persistNotes"
         static let fontSize = "fontSize"
     }
@@ -23,6 +25,8 @@ enum AppSettings {
             Key.secureKeyboardEntry: true,
             Key.autoLockMinutes: 0,
             Key.hideWhenInactive: false,
+            Key.lockOnSleep: true,
+            Key.paneTitleInWindowTitle: false,
             Key.persistNotes: true,
             Key.fontSize: 0.0,
         ])
@@ -45,6 +49,23 @@ enum AppSettings {
     static var hideWhenInactive: Bool {
         get { defaults.bool(forKey: Key.hideWhenInactive) }
         set { set(newValue, for: Key.hideWhenInactive) }
+    }
+
+    /// Lock every window when the Mac sleeps, its screens sleep, the screen
+    /// is locked or the user switches to another account.
+    static var lockOnSleep: Bool {
+        get { defaults.bool(forKey: Key.lockOnSleep) }
+        set { set(newValue, for: Key.lockOnSleep) }
+    }
+
+    /// Show the focused pane's title (which the program in it may set, e.g.
+    /// to the command line being run) as the window title. Off by default:
+    /// unlike the window's content, its title is visible outside it — in the
+    /// Dock menu, Mission Control, to Accessibility clients and in other
+    /// apps' window lists.
+    static var paneTitleInWindowTitle: Bool {
+        get { defaults.bool(forKey: Key.paneTitleInWindowTitle) }
+        set { set(newValue, for: Key.paneTitleInWindowTitle) }
     }
 
     /// Keep the Notes text on disk across restarts (otherwise memory only).

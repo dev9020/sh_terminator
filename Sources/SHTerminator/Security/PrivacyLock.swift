@@ -5,9 +5,10 @@ import LocalAuthentication
 /// glancing at (or typing into) an unattended Mac — something
 /// `sharingType = .none` can't help with.
 ///
-/// - `.locked`: Lock Now (⌃⌘L), or no input in this app for
-///   `AppSettings.autoLockMinutes`. Unlocking needs Touch ID or the macOS
-///   account password.
+/// - `.locked`: Lock Now (⌃⌘L), no input in this app for
+///   `AppSettings.autoLockMinutes`, or (with `AppSettings.lockOnSleep`) the
+///   Mac or its screens going to sleep, the screen being locked, or a switch
+///   to another user. Unlocking needs Touch ID or the macOS account password.
 /// - `.covered`: `AppSettings.hideWhenInactive` and another app is in front.
 ///   Coming back to this app uncovers the windows, no authentication.
 ///
@@ -31,6 +32,7 @@ final class PrivacyLock {
     private var lastActivity = Date()
     private var activityMonitor: Any?
     private var idleTimer: Timer?
+    private var sleepObservers: [NSObjectProtocol] = []
     private var isAuthenticating = false
 
     private init() {}
@@ -42,6 +44,22 @@ final class PrivacyLock {
         }
         idleTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.lockIfIdle() }
+        }
+
+        let workspace = NSWorkspace.shared.notificationCenter
+        let distributed = DistributedNotificationCenter.default()
+        let triggers: [(NotificationCenter, Notification.Name)] = [
+            (workspace, NSWorkspace.willSleepNotification),
+            (workspace, NSWorkspace.screensDidSleepNotification),
+            (workspace, NSWorkspace.sessionDidResignActiveNotification),
+            (distributed, Notification.Name("com.apple.screenIsLocked")),
+        ]
+        sleepObservers = triggers.map { center, name in
+            center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    if AppSettings.lockOnSleep { self?.lock() }
+                }
+            }
         }
     }
 

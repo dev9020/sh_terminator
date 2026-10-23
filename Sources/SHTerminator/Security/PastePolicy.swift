@@ -36,6 +36,21 @@ enum PastePolicy {
         return String(scalars)
     }
 
+    /// What actually gets typed for a paste of `text`: never a control
+    /// character, and no line break that would act as Return — unless the
+    /// program uses bracketed paste (it won't run them) or `runsLines` (the
+    /// user chose to run them).
+    static func typedText(_ text: String, bracketedPaste: Bool, runsLines: Bool) -> String {
+        let clean = strippingControlCharacters(text)
+        return bracketedPaste || runsLines ? clean : joiningLines(clean)
+    }
+
+    /// `text` on one line: every run of line breaks becomes a single space,
+    /// so nothing in it acts as Return.
+    static func joiningLines(_ text: String) -> String {
+        text.split(omittingEmptySubsequences: true, whereSeparator: \.isNewline).joined(separator: " ")
+    }
+
     /// C0 controls except tab, LF and CR; DEL; and the C1 range (which some
     /// terminals treat as 8-bit escape sequence introducers).
     static func isDisallowedControl(_ scalar: Unicode.Scalar) -> Bool {

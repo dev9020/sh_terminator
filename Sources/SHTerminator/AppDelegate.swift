@@ -110,6 +110,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         AppSettings.hideWhenInactive.toggle()
     }
 
+    @objc func toggleLockOnSleep(_ sender: Any?) {
+        AppSettings.lockOnSleep.toggle()
+    }
+
+    @objc func togglePaneTitleInWindowTitle(_ sender: Any?) {
+        AppSettings.paneTitleInWindowTitle.toggle()
+    }
+
     @objc func togglePersistNotes(_ sender: Any?) {
         AppSettings.persistNotes.toggle()
         NotesStore.shared.persistenceSettingChanged()
@@ -143,6 +151,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             menuItem.state = AppSettings.autoLockMinutes == menuItem.tag ? .on : .off
         case #selector(toggleHideWhenInactive(_:)):
             menuItem.state = AppSettings.hideWhenInactive ? .on : .off
+        case #selector(toggleLockOnSleep(_:)):
+            menuItem.state = AppSettings.lockOnSleep ? .on : .off
+        case #selector(togglePaneTitleInWindowTitle(_:)):
+            menuItem.state = AppSettings.paneTitleInWindowTitle ? .on : .off
         case #selector(togglePersistNotes(_:)):
             menuItem.state = AppSettings.persistNotes ? .on : .off
         case #selector(lockNow(_:)):

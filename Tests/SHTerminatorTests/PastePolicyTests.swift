@@ -27,4 +27,18 @@ import Testing
         #expect(PastePolicy.concern(for: "a\tb", bracketedPaste: true) == nil)
         #expect(PastePolicy.concern(for: "a\u{9b}b\u{7f}", bracketedPaste: true) == .controlCharacters(2))
     }
+
+    @Test func typedTextNeverEndsALineUnlessAllowed() {
+        let text = "echo a\n\nrm -rf ~\n"
+        #expect(PastePolicy.typedText(text, bracketedPaste: false, runsLines: false) == "echo a rm -rf ~")
+        #expect(PastePolicy.typedText(text, bracketedPaste: true, runsLines: false) == text)
+        #expect(PastePolicy.typedText(text, bracketedPaste: false, runsLines: true) == text)
+    }
+
+    @Test func typedTextAlwaysDropsControlCharacters() {
+        // E.g. a favorite or broadcast paste carrying an early end of bracketed paste.
+        let evil = "ls\u{1b}[201~\rwhoami"
+        #expect(PastePolicy.typedText(evil, bracketedPaste: true, runsLines: false) == "ls[201~\rwhoami")
+        #expect(PastePolicy.typedText(evil, bracketedPaste: false, runsLines: false) == "ls[201~ whoami")
+    }
 }
