@@ -11,6 +11,8 @@ Panes like iTerm2 or tmux, plus protection a regular terminal doesn't give you: 
 ![Dependencies](https://img.shields.io/badge/dependencies-1%20(SwiftTerm%2C%20pinned)-blue)
 ![Network](https://img.shields.io/badge/network-none-success)
 
+<img src="docs/screenshots/launch.gif" alt="The launcher boots, QUAD is picked, and a four-pane window opens" width="900">
+
 </div>
 
 ---
@@ -18,6 +20,7 @@ Panes like iTerm2 or tmux, plus protection a regular terminal doesn't give you: 
 ## Contents
 
 - [Highlights](#highlights)
+- [Screenshots](#screenshots)
 - [Install & run](#install--run)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Panes](#panes)
@@ -40,6 +43,17 @@ Panes like iTerm2 or tmux, plus protection a regular terminal doesn't give you: 
 | ⭐ **Favorites** | Saved commands grouped into categories, with `{{placeholders}}`, inserted with ⌘1…⌘9 or from the sidebar, but never run for you. |
 | 📝 **Notes** | A scratch pad next to the favorites. Copied text is marked as a secret so clipboard managers skip it. |
 | 🧱 **Small surface** | No networking, one pinned dependency, Hardened Runtime, no core dumps, files saved with mode `0600`. |
+
+## Screenshots
+
+![A window from the 4-pane template with the favorites and notes sidebar](docs/screenshots/main-window.png)
+
+<img src="docs/screenshots/launcher.png" alt="Startup launcher" width="600">
+
+The launcher at startup picks 1, 2 or 4 panes for the first window (<kbd>←</kbd> <kbd>→</kbd> and Return, or <kbd>1</kbd> <kbd>2</kbd> <kbd>4</kbd>). **Show Launcher at Startup** in the app menu turns it off.
+
+> [!NOTE]
+> These pictures come from a temporary demo build that rendered its own windows to images. A normal build stays invisible to screenshots and screen sharing.
 
 ## Install & run
 
@@ -92,6 +106,8 @@ The main ones are also listed in a bar along the bottom of every window; **View 
 - **Close confirmation:** if something other than the shell is running in a pane (`ssh`, `vim`, `top`…), ⌘W, ⌘⇧W and ⌘Q ask first.
 - **Checked paste (⌘V):** see SECURITY.md §15.
 
+  <img src="docs/screenshots/paste-check.png" alt="Paste check dialog" width="700">
+
 ## Broadcast input
 
 
@@ -100,20 +116,30 @@ Turn it on with <kbd>⌥⌘I</kbd>, and whatever you type or paste into one pane
 - Each pane checks a paste against **its own** program, not the program in the pane you pasted into.
 - A password you type or paste at a no-echo prompt only goes to panes that are also at a no-echo prompt. One `sudo` password can unlock every pane, but it never appears in plain text at another pane's shell prompt or in its history (SECURITY.md §16).
 
+<img src="docs/screenshots/broadcast.png" alt="Broadcast input: red BROADCAST headers on every pane" width="900">
+
 ## Favorite commands
 
 
 The **Favorites** menu holds commands you use often, like connecting to a remote database. Choosing one, or pressing <kbd>⌘1</kbd>…<kbd>⌘9</kbd>, **inserts** it into the active pane but doesn't run it. You press Return yourself, so you can edit it first.
 
+<img src="docs/screenshots/favorites.gif" alt="Click a pane, click a favorite in the sidebar: the command is inserted; a favorite with placeholders asks for the values first" width="900">
+
+*Click a pane to focus it, then click a favorite in the sidebar. `Disk usage` is inserted as is and run with Return; `Prod DB` has `{{placeholders}}`, so a form asks for the values first.*
+
 - **Categories:** group favorites as you like (*Servers*, *Databases*, *Kubernetes*…). Everything starts in **Uncategorized**, a built-in group you can rename but not delete. In the manager you can add a category with **+**, rename it by double-clicking, reorder categories by dragging, and move a favorite with its **Category** popup or by dragging it onto a category. Deleting a category keeps its favorites by moving them to the built-in group. Once there's at least one category, the sidebar and the Favorites menu show a heading for each, and <kbd>⌘1</kbd>…<kbd>⌘9</kbd> follow that order.
 - **Sidebar:** each window has one scrollable list on the right, however many panes it has. Click a command to insert it into the focused pane (the one with the highlighted border). <kbd>⌘⇧B</kbd> shows or hides it; the pencil icon opens the manager.
 - **Manage Favorites… (<kbd>⌘⇧F</kbd>):** categories on the left, the selected category's favorites on the right. Add or remove entries, double-click to edit, drag to reorder. **Insert into Terminal** (<kbd>⌘↩</kbd>) inserts the selected command.
+
+  <img src="docs/screenshots/favorites-manager.png" alt="Favorites manager" width="700">
 - **Add Selection to Favorites (<kbd>⌘⇧S</kbd>):** select a command in the terminal to save it as a new entry.
 - **Placeholders:** write `{{name}}` or `{{name:default}}` in a command, for example
   ```
   psql -h {{host:db.internal}} -U {{user}}
   ```
   When you insert it, a form asks for each value, and the filled-in command goes to the terminal.
+
+  <img src="docs/screenshots/placeholders.png" alt="Placeholder form" width="700">
 - **Filter:** the search field above the list (shown once there are two or more entries) matches names and command text.
 
 Stored in `~/Library/Application Support/SHTerminator/favorites.json` with mode `0600`. Don't put passwords in a command; see SECURITY.md §11.
@@ -140,6 +166,8 @@ Settings in the **sh_terminator** app menu:
 | **Hide Windows When in Background** | off | Covers windows while another app is active. |
 | **Show Pane Title in Window Title** | off | The window title is visible outside the window (Dock, Mission Control, Accessibility). |
 | **Keep Notes Across Restarts** | on | When off, notes live in memory only and the file is deleted (§12). |
+
+<img src="docs/screenshots/lock.png" alt="Locked window" width="900">
 
 The full threat model, how to check each protection, and the risks that remain are in **[SECURITY.md](SECURITY.md)** (in Russian).
 
