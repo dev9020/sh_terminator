@@ -1,418 +1,414 @@
-# Модель безопасности sh_terminator
+# sh_terminator security model
 
-Этот терминал предполагается использовать для обычной повседневной работы,
-включая случаи, когда в панелях на экране оказываются пароли, приватные
-ключи или seed-фразы. Все решения ниже сделаны с этим как с главным
-приоритетом — иногда в пользу безопасности, а не удобства.
+This terminal is meant for ordinary everyday work, including the times
+when passwords, private keys or seed phrases end up on screen in its
+panes. Every decision below puts that first, sometimes at the cost of
+convenience.
 
-## Что защищено и как это проверить
+## What is protected and how to check it
 
-### 1. Запрет скриншотов и screen sharing/recording этого окна
+### 1. No screenshots, screen sharing or screen recording of these windows
 
-Каждое окно создаётся с `NSWindow.sharingType = .none`
-(`Sources/SHTerminator/Security/SecurityHardening.swift`), переустанавливается
-при `windowDidBecomeKey` / входе-выходе из full screen. Это стандартный
-API AppKit, которым помечают свои окна менеджеры паролей — окно физически
-исключается из `CGWindowListCreateImage`, ScreenCaptureKit, встроенного
-скриншота (⌘⇧4/⌘⇧5) и из захвата экрана в Zoom/Meet/Slack/QuickTime.
+Every window is created with `NSWindow.sharingType = .none`
+(`Sources/SHTerminator/Security/SecurityHardening.swift`), and it is set
+again on `windowDidBecomeKey` and on entering or leaving full screen. This
+is the standard AppKit API password managers use for their windows: the
+window is left out of `CGWindowListCreateImage`, ScreenCaptureKit, the
+built-in screenshot tools (⌘⇧4/⌘⇧5) and screen capture in
+Zoom/Meet/Slack/QuickTime.
 
-Проверка:
+Check:
 ```
 screencapture -l<windowID> /tmp/out.png   # -> "could not create image from window"
 ```
-(номер окна — `kCGWindowNumber` из `CGWindowListCopyWindowInfo` для процесса
-sh_terminator; у этого же окна `kCGWindowSharingState` равен `0`).
+(the window number is `kCGWindowNumber` from `CGWindowListCopyWindowInfo`
+for the sh_terminator process; the same window has `kCGWindowSharingState`
+equal to `0`).
 
-Эта проверка покрывает старый путь захвата (CGWindowList). Приложения,
-которые снимают экран через ScreenCaptureKit (на новых macOS — Zoom, Meet,
-QuickTime, ⌘⇧5), используют другой путь, и есть сообщения, что на
-macOS 15+ он `sharingType = .none` не учитывает. На каждой новой версии
-macOS проверяйте вручную: начните запись экрана через ⌘⇧5 или
-демонстрацию экрана в Zoom/Meet и убедитесь, что вместо окна
-sh_terminator видна пустота. Если окно видно, на этой версии macOS этот
-пункт не защищает — держите секреты закрытыми блокировкой (⌃⌘L).
+This check covers the older capture path (CGWindowList). Apps that capture
+the screen through ScreenCaptureKit (on recent macOS: Zoom, Meet,
+QuickTime, ⌘⇧5) use a different path, and there are reports that on
+macOS 15+ it ignores `sharingType = .none`. Check by hand on every new
+macOS version: start a screen recording with ⌘⇧5 or a screen share in
+Zoom/Meet and make sure the sh_terminator window shows up as empty space.
+If the window is visible, this item does not protect you on that macOS
+version — keep secrets covered with the lock (⌃⌘L).
 
-Защищены только сами окна (терминал, избранное, алерты-шиты). Всплывающие
-подсказки и меню — отдельные системные окна, которые в захват попадают,
-поэтому команды из избранного в подсказках не показываются (ни в боковой
-панели, ни в меню Favorites); в меню видны только *имена* избранного.
-Заголовок окна тоже виден вне окна — см. п. 17.
+Only the app's own windows are protected (the launcher, terminal windows,
+favorites, alert sheets). Tooltips and menus are separate system windows
+that capture does include, so favorite commands are never shown in
+tooltips (neither in the sidebar nor in the Favorites menu); the menu shows
+only the favorites' *names*. The window title is visible outside the
+window as well — see §17.
 
-### 2. Контент панелей никогда не пишется на диск
+### 2. Pane contents are never written to disk
 
-- `NSWindow.isRestorable = false` на каждом окне — macOS никогда не
-  сериализует содержимое в `~/Library/Saved Application State/`.
-- Scrollback каждой панели живёт только в памяти процесса; приложение не
-  ведёт никакого лога сессии на диск самостоятельно. Сами по себе на диск
-  пишутся только список избранных команд, заметки (см. п. 11 и 12) и
-  настройки — переключатели и числа в
-  `~/Library/Preferences/dev.local.shterminator.plist`, без содержимого
-  панелей, команд или заметок.
-- Оба файла с данными (избранное, заметки) пишутся через
-  `SecurityHardening.writePrivateFile`: временный файл создаётся сразу с
-  правами `0600` (`open(O_CREAT|O_EXCL, 0600)`), затем `fsync` и атомарный
-  `rename`. Ни в какой момент файл не существует с правами по umask.
-  Каталог при каждой записи приводится к `0700` (`chmod`), даже если он
-  уже существовал с другими правами.
-  `Scripts/audit.sh` проверяет, что других способов записи в коде нет
-  (`.write(to:/toFile:)`, `FileHandle`, `fopen`, `O_CREAT`, `copyItem`…).
-- **Clear Scrollback** (⌘K) стирает scrollback активной панели и все
-  строки экрана выше курсора (остаётся строка с приглашением). Это
-  гигиена против чужого взгляда и случайного копирования, а не гарантия:
-  SwiftTerm освобождает память строк для повторного использования, но не
-  затирает её нулями.
+- `NSWindow.isRestorable = false` on every window: macOS never serializes
+  their contents into `~/Library/Saved Application State/`.
+- Each pane's scrollback lives only in the process's memory; the app keeps
+  no session log on disk. The only things it writes to disk on its own are
+  the favorite commands, the notes (see §11 and §12) and the settings —
+  switches and numbers in
+  `~/Library/Preferences/dev.local.shterminator.plist`, with no pane
+  contents, commands or notes.
+- Both data files (favorites, notes) are written through
+  `SecurityHardening.writePrivateFile`: a temporary file is created with
+  mode `0600` from the start (`open(O_CREAT|O_EXCL, 0600)`), then `fsync`
+  and an atomic `rename`. At no point does the file exist with
+  umask-derived permissions. The directory is set to `0700` (`chmod`) on
+  every write, even if it already existed with other permissions.
+  `Scripts/audit.sh` checks that the code has no other way of writing
+  files (`.write(to:/toFile:)`, `FileHandle`, `fopen`, `O_CREAT`,
+  `copyItem`…).
+- **Clear Scrollback** (⌘K) erases the focused pane's scrollback and every
+  screen line above the cursor (the prompt line stays). This is hygiene
+  against prying eyes and accidental copying, not a guarantee: SwiftTerm
+  releases the lines' memory for reuse but does not zero it.
 
-### 3. Нет core dump'ов при крэше
+### 3. No core dumps on a crash
 
-`setrlimit(RLIMIT_CORE, 0)` вызывается первой строкой `main.swift`
-(`SecurityHardening.hardenProcess()`), до создания приложения и первого
-окна — так что память процесса (с возможными секретами) не может быть
-сброшена на диск при креше.
+`setrlimit(RLIMIT_CORE, 0)` is the first line of `main.swift`
+(`SecurityHardening.hardenProcess()`), before the application and its first
+window exist — so the process's memory (possibly holding secrets) can never
+be dumped to disk in a crash.
 
-### 4. Нулевая сеть внутри самого приложения
+### 4. No networking in the app itself
 
-Код приложения (`Sources/SHTerminator`) не импортирует `URLSession`,
-`Network.framework` или `CFNetwork` — проверяется простым grep:
+The app's code (`Sources/SHTerminator`) does not import `URLSession`,
+`Network.framework` or `CFNetwork` — a plain grep checks it:
 ```
-grep -rn "URLSession\|Network\.framework\|CFNetwork" Sources/SHTerminator   # пусто
+grep -rn "URLSession\|Network\.framework\|CFNetwork" Sources/SHTerminator   # empty
 ```
-(эту и другие проверки из этого документа выполняет `Scripts/audit.sh`;
-`build-app.sh` запускает его после каждой сборки).
-Нет автообновления, нет аналитики, нет крашрепортера — ни одной такой
-зависимости не добавлялось и не планируется.
+(this and the other checks in this document are run by `Scripts/audit.sh`;
+`build-app.sh` runs it after every build).
+No auto-update, no analytics, no crash reporter — no such dependency has
+been added and none is planned.
 
-### 5. Единственная внешняя зависимость — запинена и прозрачна
+### 5. The single external dependency is pinned and transparent
 
-`Package.swift` указывает точную версию SwiftTerm (`exact: "1.20.0"`),
-залоченную в `Package.resolved` конкретным коммитом. `swift package update`
-никогда молча не подтянёт другую версию — для обновления версии нужно явно
-менять `Package.swift`. У цели `SwiftTerm` в её собственном `Package.swift`
-нет зависимостей на macOS (графические пакеты у неё условны и используются
-только на Linux/Windows/WASM); `swift-argument-parser`, который виден в
-`Package.resolved`, нужен только внутреннему `Termcast`-исполняемому файлу
-SwiftTerm, который мы не используем и не линкуем.
+`Package.swift` names an exact SwiftTerm version (`exact: "1.20.0"`),
+locked to a specific commit in `Package.resolved`. `swift package update`
+will never silently pull in another version — updating it takes an
+explicit change to `Package.swift`. The `SwiftTerm` target has no
+dependencies on macOS in its own `Package.swift` (its graphics packages
+are conditional and used only on Linux/Windows/WASM);
+`swift-argument-parser`, visible in `Package.resolved`, is needed only by
+SwiftTerm's internal `Termcast` executable, which we neither use nor link.
 
-### 6. Hardened Runtime без лазеек для инъекции кода
+### 6. Hardened Runtime with no code-injection loopholes
 
-`Scripts/build-app.sh` подписывает `.app` с `--options runtime` и
-`SHTerminator.entitlements`. Файл entitlements пустой — в частности, там
-**нет** `com.apple.security.cs.disable-library-validation` и **нет**
-`com.apple.security.cs.allow-unsigned-executable-memory`. Это означает, что
-сторонний `dylib` не может быть инжектирован в процесс стандартными
-способами (`DYLD_INSERT_LIBRARIES` и т.п. блокируются Hardened Runtime +
-library validation).
+`Scripts/build-app.sh` signs the `.app` with `--options runtime` and
+`SHTerminator.entitlements`. The entitlements file is empty — in
+particular, there is **no** `com.apple.security.cs.disable-library-validation`
+and **no** `com.apple.security.cs.allow-unsigned-executable-memory`. This
+means a third-party `dylib` cannot be injected into the process by the
+usual means (`DYLD_INSERT_LIBRARIES` and the like are blocked by Hardened
+Runtime + library validation).
 
-Подпись по умолчанию ad-hoc (`codesign --sign -`). Hardened Runtime
-(блокировка `DYLD_INSERT_LIBRARIES` и т.п.) работает и с ней, но ad-hoc
-подпись никого не идентифицирует: любой, кто может писать в `.app`, может
-подменить бинарник и переподписать его так же «валидно», а Gatekeeper
-такую копию не отличит. Для личного использования на одной машине это
-приемлемо; иначе соберите с настоящей подписью:
+The signature is ad-hoc by default (`codesign --sign -`). Hardened Runtime
+(blocking `DYLD_INSERT_LIBRARIES` and the like) works with it too, but an
+ad-hoc signature identifies no one: anyone who can write to the `.app` can
+replace the binary and re-sign it just as "validly", and Gatekeeper cannot
+tell that copy apart. That is acceptable for personal use on one machine;
+otherwise build with a real signature:
 ```
 SIGN_IDENTITY="Developer ID Application: …" ./Scripts/build-app.sh
 ```
-(список идентичностей — `security find-identity -v -p codesigning`), а
-для раздачи на другие машины добавьте нотаризацию.
+(list your identities with `security find-identity -v -p codesigning`),
+and add notarization to distribute it to other machines.
 
-### 7. App Sandbox осознанно выключен
+### 7. App Sandbox is deliberately off
 
-В отличие от типичных App Store приложений, здесь **нет**
-`com.apple.security.app-sandbox`. Причина: это терминал — запущенный внутри
-него `ssh`/`git`/`curl`/менеджеры пакетов должны иметь обычный доступ к сети
-и файловой системе пользователя, как в стандартном Terminal.app. Сажать в
-sandbox сам инструмент, но не его единственную полезную нагрузку (shell),
-создало бы иллюзию защиты без реального эффекта.
+Unlike typical App Store apps, there is **no** `com.apple.security.app-sandbox`.
+The reason: this is a terminal — the `ssh`/`git`/`curl`/package managers run
+inside it need normal access to the network and the user's file system,
+just as in the standard Terminal.app. Sandboxing the tool but not its only
+payload (the shell) would create an illusion of protection with no real
+effect.
 
-### 8. Чистое окружение дочернего процесса
+### 8. A clean environment for the child process
 
-`PaneSession` определяет путь до логин-шелла через `getpwuid_r` (как это
-делает сам Terminal.app), а не через переменную `SHELL`, которую можно
-подменить до запуска. Окружение дочернего shell собирает SwiftTerm
-(`Terminal.getEnvironmentVariables`), а не наследует целиком от
-приложения: `TERM=xterm-256color`, `COLORTERM=truecolor`,
-`LANG=en_US.UTF-8` (жёстко, независимо от системной локали), плюс
-`LOGNAME`, `USER`, `HOME`, `DISPLAY`, `LC_TYPE` — если они есть в
-окружении самого приложения. Сверх этого приложение передаёт только
-`TMPDIR` (`PaneSession.shellEnvironment`): личный временный каталог
-пользователя (`/var/folders/…`, `0700`) выставляет launchd, а не login
-shell, и без него шелл и всё, что в нём запущено, писали бы временные
-файлы (here-doc, буферы редакторов) в общий для всех учётных записей
-`/tmp`. `PATH` и всё остальное не передаётся (login shell выставляет их
-сам из своих rc-файлов). Ничего специфичного для приложения не
-добавляется.
+`PaneSession` finds the login shell's path with `getpwuid_r` (as
+Terminal.app itself does), not from the `SHELL` variable, which could be
+tampered with before launch. The child shell's environment is built by
+SwiftTerm (`Terminal.getEnvironmentVariables`) rather than inherited
+wholesale from the app: `TERM=xterm-256color`, `COLORTERM=truecolor`,
+`LANG=en_US.UTF-8` (hard-coded, whatever the system locale), plus
+`LOGNAME`, `USER`, `HOME`, `DISPLAY`, `LC_TYPE` if they are present in the
+app's own environment. On top of that the app passes only `TMPDIR`
+(`PaneSession.shellEnvironment`): the user's private temporary directory
+(`/var/folders/…`, `0700`) is set by launchd, not by the login shell, and
+without it the shell and everything run in it would write temporary files
+(here-docs, editor buffers) to `/tmp`, which all accounts share. `PATH`
+and everything else is not passed on (the login shell sets them itself
+from its rc files). Nothing app-specific is added.
 
-### 9. Изоляция между панелями
+### 9. Isolation between panes
 
-Каждая панель — отдельный `PaneSession`, то есть отдельный процесс шелла на
-отдельном pty. Панели не делят между собой никакого состояния сверх того,
-что и так дают два независимых процесса ОС.
+Each pane is a separate `PaneSession`, i.e. a separate shell process on
+its own pty. Panes share no state beyond what any two independent OS
+processes do.
 
-SwiftTerm открывает pty через `forkpty`, и «главный» конец терминала
-(`/dev/ptmx`), который остаётся у приложения, по умолчанию наследуется
-всеми процессами, запущенными позже. Без защиты шелл каждой следующей
-панели и всё, что в нём запущено, держали бы терминалы всех предыдущих:
-могли бы читать их вывод и вводить в них команды (например, в панель с
-`ssh` на прод-сервер или с `sudo -s`). Поэтому сразу после запуска шелла
-на этот дескриптор ставится `FD_CLOEXEC`
-(`TerminalPaneView.startIsolatedProcess`). Проверка — тест
-`PaneIsolationTests` (через `lsof` у второго процесса нет `/dev/ptmx`), а
-`Scripts/audit.sh` проверяет, что шелл запускается только так.
+SwiftTerm opens the pty with `forkpty`, and the terminal's "master" end
+(`/dev/ptmx`), which the app keeps, is by default inherited by every
+process started later. Without protection, the shell of each later pane
+and everything run in it would hold the terminals of all earlier panes:
+they could read their output and type commands into them (for example
+into a pane with `ssh` to a production server or with `sudo -s`). So
+`FD_CLOEXEC` is set on that descriptor right after the shell starts
+(`TerminalPaneView.startIsolatedProcess`). The `PaneIsolationTests` test
+checks it (via `lsof`, the second process has no `/dev/ptmx`), and
+`Scripts/audit.sh` checks that shells are started only this way.
 
-### 10. Гигиена буфера обмена (опционально)
+### 10. Clipboard hygiene (optional)
 
-Пункт меню **Edit → Copy & Clear Clipboard After 20s** (⌥⌘C) копирует
-выделение и само очищает системный буфер обмена через 20 секунд — удобно
-для вставки пароля или seed-фразы без риска, что она надолго останется в
-буфере. Обычный ⌘C продолжает работать как всегда — это дополнительная
-команда, а не ограничение.
+The **Edit → Copy & Clear Clipboard After 20s** menu item (⌥⌘C) copies
+the selection and clears the system clipboard by itself 20 seconds later —
+handy for pasting a password or seed phrase without it lingering in the
+clipboard. Plain ⌘C keeps working as always — this is an extra command,
+not a restriction.
 
-Кроме таймера, такая копия (и кнопка «скопировать всё» в заметках):
-- помечается типами `org.nspasteboard.ConcealedType` и
-  `org.nspasteboard.TransientType` (nspasteboard.org) — менеджеры буфера
-  обмена (Maccy, Paste, Raycast, Alfred, 1Password…) такие записи в
-  историю не сохраняют;
-- кладётся с `NSPasteboard.ContentsOptions.currentHostOnly` — не
-  передаётся через Universal Clipboard на iPhone/iPad/другие Mac.
+Besides the timer, such a copy (and the "copy all" button in the notes):
+- is marked with the `org.nspasteboard.ConcealedType` and
+  `org.nspasteboard.TransientType` types (nspasteboard.org) — clipboard
+  managers (Maccy, Paste, Raycast, Alfred, 1Password…) do not save such
+  entries in their history;
+- is put on the clipboard with `NSPasteboard.ContentsOptions.currentHostOnly`
+  — it is not passed through Universal Clipboard to an iPhone/iPad/other Mac.
 
-Очистка через 20 секунд срабатывает, только если буфер с тех пор не
-менялся (`changeCount`): если за это время вы скопировали что-то другое,
-в любом приложении, оно остаётся на месте.
+The 20-second clear only happens if the clipboard has not changed since
+(`changeCount`): if you copied something else in the meantime, in any
+app, it stays.
 
-Менеджер буфера обмена, который эти пометки игнорирует, всё равно успеет
-сохранить запись — это вне контроля приложения.
+A clipboard manager that ignores these markers will still record the
+entry — that is outside the app's control.
 
-Программы в панелях к буферу обмена доступа не имеют: ни прочитать, ни
-записать его через OSC 52 нельзя (п. 17).
+Programs in panes have no access to the clipboard: they can neither read
+nor write it through OSC 52 (§17).
 
-### 11. Избранные команды
+### 11. Favorite commands
 
-Избранные команды хранятся на диске:
-`~/Library/Application Support/SHTerminator/favorites.json`, каталог `0700`,
-файл `0600` (читает только ваш пользователь). Это открытый текст, поэтому
-**не вписывайте пароли прямо в команду** — для БД используйте
-`~/.my.cnf` / `~/.pgpass`, `mysql --login-path`, ssh-ключи и т.п., а
-пароль вводите на запрос.
+Favorite commands are stored on disk:
+`~/Library/Application Support/SHTerminator/favorites.json`, directory
+`0700`, file `0600` (readable by your user only). It is plain text, so
+**do not put passwords directly into a command** — for databases use
+`~/.my.cnf` / `~/.pgpass`, `mysql --login-path`, ssh keys and so on, and
+type the password when prompted.
 
-Вставка из избранного никогда не запускает команду: завершающие переводы
-строк отбрасываются, а внутренние сохраняются, только если команда
-вставляется в приглашение собственного шелла панели — zsh или fish — с
-включённым bracketed paste (тогда шелл сам её не выполнит). Во всех
-остальных случаях внутренние переводы строк заменяются пробелами: режим
-bracketed paste — лишь флаг, который может включить любая программа или
-любой вывод, в том числе программа, которая этот режим не соблюдает
-(см. п. 15). Управляющие
-символы (в т.ч. `ESC`, которым можно досрочно закрыть bracketed paste)
-из вставляемой команды всегда удаляются — откуда бы она ни взялась
-(выделение в терминале через ⌘⇧S, значение плейсхолдера, отредактированный
-вручную `favorites.json`). То же действует в broadcast-режиме для каждой
-панели отдельно (п. 16). Окно управления избранным тоже исключено из
-скриншотов и screen sharing.
+Inserting a favorite never runs the command: trailing line breaks are
+dropped, and inner ones are kept only if the command goes into the pane's
+own shell prompt — zsh or fish — with bracketed paste on (then the shell
+will not run it by itself). In every other case inner line breaks are
+replaced with spaces: bracketed paste mode is just a flag that any program
+or any output can switch on, including a program that does not honour it
+(see §15). Control characters (including `ESC`, which could end a
+bracketed paste early) are always removed from the inserted command,
+wherever it came from (a terminal selection via ⌘⇧S, a placeholder value,
+a hand-edited `favorites.json`). The same applies to each pane separately
+in broadcast mode (§16). The favorites manager window is also excluded
+from screenshots and screen sharing.
 
-### 12. Заметки
+### 12. Notes
 
-Блок **Notes** в боковой панели сохраняется в
-`~/Library/Application Support/SHTerminator/notes.txt` (каталог `0700`,
-файл `0600`), чтобы текст переживал перезапуск. Это открытый текст: если
-вставили туда пароль или seed-фразу, удалите их, как только они больше не
-нужны. После очистки поля (кнопка корзины или удаление всего текста)
-файл удаляется с диска, а не остаётся пустым. Удалённый файл при этом не
-затирается: его содержимое может уцелеть на диске и в бэкапах Time Machine.
-Поэтому долго хранить секреты в заметках не стоит.
-Если в меню приложения выключить **Keep Notes Across Restarts**, заметки
-живут только в памяти: файл удаляется сразу и больше не создаётся, а
-текст пропадает при выходе из приложения.
-В поле выключены проверка орфографии, автозамена, «умные» кавычки,
-распознавание ссылок и Writing Tools (Apple Intelligence, macOS 15+) —
-вставленный текст не изменяется и не уходит в системные сервисы
-проверки и переписывания текста. То же действует во всех редактируемых
-полях приложения: имя и команда в окне избранного, значения
-плейсхолдеров, поиск в боковой панели (`PlainTextField` /
-`PlainSearchField`) — иначе системная автозамена могла бы незаметно
-поменять `"` на `“` или `--` на `—` в команде. Services для этого поля отключены, а в
-контекстном меню оставлены только Cut / Copy / Paste / Select All (без
-Look Up, Translate, Share, Speech).
+The **Notes** box in the sidebar is saved to
+`~/Library/Application Support/SHTerminator/notes.txt` (directory `0700`,
+file `0600`) so the text survives a restart. It is plain text: if you
+pasted a password or seed phrase into it, delete it as soon as you no
+longer need it. When the box is cleared (the trash button or deleting all
+the text), the file is deleted from disk rather than left empty. The
+deleted file is not overwritten, though: its contents may survive on disk
+and in Time Machine backups. So do not keep secrets in the notes for long.
+If **Keep Notes Across Restarts** is turned off in the app menu, the notes
+live in memory only: the file is deleted at once and never created again,
+and the text is gone when the app quits.
+Spell checking, autocorrect, smart quotes, link detection and Writing
+Tools (Apple Intelligence, macOS 15+) are off in this box — pasted text is
+not changed and is not sent to the system's text checking and rewriting
+services. The same goes for every editable field in the app: the name and
+command in the favorites window, placeholder values, the sidebar search
+(`PlainTextField` / `PlainSearchField`) — otherwise system autocorrect
+could quietly turn `"` into `“` or `--` into `—` in a command. Services are
+disabled for this box, and its context menu keeps only Cut / Copy / Paste /
+Select All (no Look Up, Translate, Share, Speech).
 
 ### 13. Secure Keyboard Entry
 
-Пока приложение активно (и пункт **Secure Keyboard Entry** в меню
-приложения включён — по умолчанию да), вызывается
-`EnableSecureEventInput()`; при уходе в фон — `DisableSecureEventInput()`.
-Пока он включён, `CGEventTap` других процессов — обычный способ, которым
-кейлоггеры и «утилиты» с правом Input Monitoring читают нажатия, — не
-получает ничего из набранного здесь, в том числе пароли на запрос `sudo`,
-`ssh`, `gpg`. Это тот же механизм, что «Secure Keyboard Entry» в
-Terminal.app и iTerm2.
+While the app is active (and **Secure Keyboard Entry** in the app menu is
+on — it is by default), `EnableSecureEventInput()` is called; when it goes
+to the background, `DisableSecureEventInput()`. While it is on, other
+processes' `CGEventTap`s — the usual way keyloggers and "utilities" with
+Input Monitoring permission read keystrokes — get nothing typed here,
+including passwords at `sudo`, `ssh` and `gpg` prompts. This is the same
+mechanism as "Secure Keyboard Entry" in Terminal.app and iTerm2.
 
-Проверка (при активном окне sh_terminator):
+Check (with the sh_terminator window active):
 ```
-ioreg -l -w 0 | grep kCGSSessionSecureInputPID   # = PID процесса SHTerminator
+ioreg -l -w 0 | grep kCGSSessionSecureInputPID   # = PID of the SHTerminator process
 ```
-Побочный эффект: пока окно активно, глобальные горячие клавиши и
-автоввод некоторых сторонних приложений (text expanders, автоввод
-менеджеров паролей) могут не работать — так и задумано.
+Side effect: while the window is active, global hotkeys and auto-typing of
+some third-party apps (text expanders, password managers' auto-type) may
+not work — this is intended.
 
-### 14. Блокировка окон
+### 14. Window lock
 
-- **Lock Now** (⌃⌘L), **Auto-Lock** (после 1/5/15/30 минут без ввода
-  в этом приложении) или **Lock When Mac Sleeps or Screen Locks**
-  (включено по умолчанию: сон Mac, сон дисплеев, блокировка экрана,
-  переключение на другого пользователя): каждое окно убирает из себя
-  панели и боковую панель целиком и показывает непрозрачный экран
-  блокировки. Шеллы продолжают
-  работать. Снять блокировку можно только через Touch ID или пароль учётной
-  записи macOS (`LAContext`, `.deviceOwnerAuthentication`).
-- **Hide Windows When in Background**: пока активно другое приложение,
-  окна закрыты той же шторкой (без аутентификации — она снимается при
-  возврате в приложение). Защищает от взгляда на окно, оставленное
-  видимым позади других.
-- Пока окна закрыты, до шелла не доходит ничего: панелей нет в иерархии
-  view, так что нажатия, клики, вставка из избранного, ⌘V, broadcast и
-  прочие пункты меню, работающие с панелями, недоступны. Открыть новые
-  окна или окно избранного тоже нельзя (окно избранного прячется).
-- Настройки безопасности в меню приложения (Secure Keyboard Entry,
-  Auto-Lock, Lock When Mac Sleeps, Hide Windows When in Background, Show
-  Pane Title in Window Title, Keep Notes Across Restarts) при блокировке
-  недоступны: тот, кто сидит за заблокированным окном, не может их
-  ослабить или удалить заметки с диска. Доступны только Lock Now и Quit.
-- Открытый на окне шит (проверка вставки, плейсхолдеры, подтверждение
-  закрытия, открытие ссылки) при блокировке отменяется — он не остаётся поверх шторки с
-  текстом команды и не принимает Return. Заголовок окна на время
-  блокировки сбрасывается на `sh_terminator`.
+- **Lock Now** (⌃⌘L), **Auto-Lock** (after 1/5/15/30 minutes without
+  input in this app) or **Lock When Mac Sleeps or Screen Locks** (on by
+  default: the Mac sleeping, the displays sleeping, the screen being
+  locked, switching to another user): every window removes its panes and
+  sidebar entirely and shows an opaque lock screen. The shells keep
+  running. Only Touch ID or the macOS account password can unlock it
+  (`LAContext`, `.deviceOwnerAuthentication`).
+- **Hide Windows When in Background**: while another app is active, the
+  windows are covered by the same screen (without authentication — it is
+  lifted when you return to the app). Protects against someone looking at
+  a window left visible behind others.
+- While the windows are covered, nothing reaches a shell: the panes are not
+  in the view hierarchy, so keystrokes, clicks, inserting favorites, ⌘V,
+  broadcast and the other menu items that act on panes are unavailable.
+  New windows and the favorites window cannot be opened either (the
+  favorites window is hidden).
+- The security settings in the app menu (Secure Keyboard Entry, Auto-Lock,
+  Lock When Mac Sleeps, Hide Windows When in Background, Show Pane Title in
+  Window Title, Keep Notes Across Restarts) are unavailable while locked:
+  whoever sits at the locked window cannot weaken them or delete the notes
+  from disk. Only Lock Now and Quit remain available.
+- A sheet open on a window (paste check, placeholders, close confirmation,
+  opening a link) is cancelled when the lock engages — it does not stay on
+  top of the cover showing a command's text and does not take Return. The
+  window title is reset to `sh_terminator` while locked.
 
-### 15. Проверка вставки (⌘V)
+### 15. Paste check (⌘V)
 
-Перед вставкой текст проверяется (`Security/PastePolicy.swift`):
-- **Управляющие символы** (C0, кроме табуляции и переводов строк, DEL,
-  C1) — всегда вопрос, вариант по умолчанию — вставить без них. Через
-  `ESC[201~` спрятанный в скопированном со страницы тексте фрагмент может
-  досрочно закрыть bracketed paste, и остаток (с переводом строки)
-  выполнится как набранный вручную.
-- **Переводы строк** — каждый из них может сработать как Return. Без
-  вопроса многострочная вставка проходит только в приглашение
-  собственного шелла панели, zsh или fish, с включённым bracketed paste —
-  они сами включают этот режим у каждого приглашения и вставленные строки
-  не выполняют. Во всех остальных случаях — вопрос с вариантами «вставить
-  одной строкой» (по умолчанию), «вставить и выполнить» (или «вставить
-  как есть», если программа включила bracketed paste), «отмена». Режиму,
-  который включила какая-то другая программа (`ssh`, REPL, `sh`, bash 3.2
-  из macOS), не верим: включить его может любой вывод — `cat` файла,
-  баннер удалённого сервера, — в том числе перед программой, которая его
-  не соблюдает и выполнит каждую строку.
+Text is checked before it is pasted (`Security/PastePolicy.swift`):
+- **Control characters** (C0 other than tab and line breaks, DEL, C1) —
+  always a question; the default is to paste without them. With
+  `ESC[201~`, a fragment hidden in text copied from a web page can end a
+  bracketed paste early, and the rest (with a line break) would run as if
+  typed by hand.
+- **Line breaks** — each of them may act as Return. A multi-line paste
+  goes through without a question only into the pane's own shell prompt,
+  zsh or fish, with bracketed paste on — they switch that mode on
+  themselves at every prompt and do not run pasted lines. In every other
+  case there is a question with the options "paste as one line" (default),
+  "paste and run lines" (or "paste as is" if the program turned bracketed
+  paste on) and "cancel". A mode turned on by any other program (`ssh`, a
+  REPL, `sh`, macOS's bash 3.2) is not trusted: any output can turn it on —
+  a `cat`-ed file, a remote server's banner — including just before a
+  program that does not honour it and will run every line.
 
-В тексте предупреждения содержимое буфера не показывается (это может быть
-секрет, а алерт — отдельное окно).
+The warning text never shows the clipboard contents (they may be a secret,
+and the alert is a separate window).
 
 ### 16. Broadcast
 
-Режим ⌥⌘I отправляет ввод во все панели окна. Ответы самого терминала
-программе (позиция курсора, атрибуты устройства и т.п.) не рассылаются —
-только то, что набрал или вставил пользователь. Пока режим включён,
-заголовки всех панелей красные.
+⌥⌘I sends input to every pane of the window. The terminal's own replies to
+the program (cursor position, device attributes and so on) are not
+broadcast — only what the user typed or pasted. While broadcast is on,
+every pane's header is red.
 
-- **Вставка** (⌘V, избранное) в каждой панели обрабатывается по *её*
-  программе: если там не приглашение zsh/fish с bracketed paste (п. 15),
-  переводы строк заменяются пробелами и ничего не выполнится — даже если
-  в исходной панели вопроса не было. Исключение — явный выбор «Paste and
-  Run Lines»: тогда строки выполняются во всех панелях, и диалог об этом
-  предупреждает. «Paste As Is» сохраняет переводы строк только в исходной
-  панели (её программа обещала их не выполнять); в остальных панелях
-  вставка обрабатывается по их программе, как обычно.
-- **Набор и вставка при выключенном эхо.** Если в исходной панели терминал
-  не отображает ввод (запрос пароля `sudo`/`ssh`/`gpg`, а также
-  полноэкранные программы вроде vim), нажатия и вставленный текст уходят
-  только в те панели, где эхо тоже выключено. Так пароль `sudo`, набранный один раз для всех
-  панелей, по-прежнему работает, но не напечатается открытым текстом у
-  приглашения шелла в соседней панели (и не попадёт в её историю).
-  Ограничение: в панели с `ssh` локальное эхо выключено всегда (эхо
-  делает удалённая сторона), поэтому между ssh-панелями это правило не
-  различает запрос пароля и обычный ввод.
+- **A paste** (⌘V, favorites) is handled in each pane according to *its*
+  program: unless it is a zsh/fish prompt with bracketed paste (§15), line
+  breaks are replaced with spaces and nothing runs — even if the source
+  pane asked no question. The exception is an explicit "Paste and Run
+  Lines": then the lines run in every pane, and the dialog warns about it.
+  "Paste As Is" keeps line breaks only in the source pane (its program
+  promised not to run them); in the other panes the paste is handled
+  according to their program, as usual.
+- **Typing and pasting with echo off.** If the source pane's terminal does
+  not echo input (a `sudo`/`ssh`/`gpg` password prompt, and also
+  full-screen programs such as vim), keystrokes and pasted text go only to
+  panes where echo is off too. So a `sudo` password typed once for all
+  panes still works, but is never printed in plain text at a neighbouring
+  pane's shell prompt (or stored in its history).
+  Limitation: in a pane running `ssh`, local echo is always off (the remote
+  side does the echoing), so between ssh panes this rule cannot tell a
+  password prompt from ordinary input.
 
-### 17. Что программа в панели может попросить у терминала
+### 17. What a program in a pane may ask of the terminal
 
-Попросить терминал о чём-то escape-последовательностью может любая
-программа в панели — в том числе удалённый сервер за `ssh` или файл,
-который вы просто вывели через `cat`. Поэтому
-(`Security/HostRequestFilter.swift`):
-- **Буфер обмена (OSC 52)**: чтение запрещено (иначе программа получила
-  бы всё, что лежит в буфере, например только что скопированный пароль),
-  запись тоже (иначе она могла бы молча подменить буфер командой, которую
-  вы потом вставите в другом месте). Копирование делается только вами
+Any program in a pane can ask the terminal for something with an escape
+sequence — including a remote server behind `ssh`, or a file you merely
+printed with `cat`. Therefore (`Security/HostRequestFilter.swift`):
+- **Clipboard (OSC 52)**: reading is refused (otherwise the program would
+  get whatever is on the clipboard, such as a password you just copied),
+  and so is writing (otherwise it could silently replace the clipboard
+  with a command you would later paste somewhere else). Only you copy
   (⌘C, ⌥⌘C).
-- **Ссылки** (⌘-клик, в т.ч. OSC 8, где текст ссылки и её адрес задаёт
-  программа): открываются только `http`, `https` и `mailto`. Файлы,
-  приложения и произвольные URL-схемы не открываются (`file:///…/x.command`
-  запустил бы скрипт) — вместо этого звучит сигнал. Разрешённая ссылка
-  открывается только после подтверждения в шите, где показан её настоящий
-  адрес (в percent-encoded виде, не длиннее 1000 символов) — текст ссылки
-  на экране может говорить другое.
-- **Содержимое экрана (DECRQCRA, `CSI … y`)**: SwiftTerm отвечает на
-  этот запрос контрольной суммой прямоугольника экрана, а для одной
-  ячейки она равна коду символа — так программа (в том числе удалённый
-  сервер за `ssh`) могла бы посимвольно прочитать всё, что видно в
-  панели, включая выведенное до неё. Выключить это в SwiftTerm нельзя,
-  поэтому весь вывод программы проходит через
-  `Security/HostOutputFilter.swift`: такой запрос обрывается (последний
-  байт заменяется на SUB) и остаётся без ответа.
-- **Локальные файлы через Kitty graphics** (APC `G` с `t=f`, `t=t`,
-  `t=s`): по такому запросу сам терминал открывал бы указанный программой
-  локальный файл или shared memory — удалённый сервер узнавал бы по
-  ответу, есть ли у вас такой файл, мог бы заставить приложение прочитать
-  до 400 МБ или показать запрос доступа к ~/Documents от его имени. Тот
-  же фильтр обрывает такие команды (CAN перед концом последовательности),
-  и терминал их не выполняет. Картинки, переданные прямо в выводе
-  (`t=d`, по умолчанию), работают.
-  Фильтр — теневая копия конечного автомата парсера SwiftTerm 1.20.0
-  (та же таблица переходов и те же сокращения пути), поэтому видит
-  последовательность ровно там, где её увидит SwiftTerm, при любом
-  разбиении вывода на порции; остальной вывод проходит без изменений.
-  Тесты `HostOutputFilterTests` проверяют это на настоящем парсере
-  SwiftTerm, в том числе фаззингом. При обновлении SwiftTerm фильтр нужно
-  сверить заново — `Scripts/audit.sh` падает, если версии в
-  `Package.swift` и в фильтре расходятся.
-- **Заголовок (OSC 0/2)**: из него удаляются управляющие символы,
-  переводы строк, bidi-override-символы (которыми можно переставить
-  видимый текст) и невидимые символы (zero-width space/joiner,
-  tag-символы и т.п., которыми можно сделать два заголовка внешне
-  одинаковыми), длина ограничена 200 символами. Заголовок показывается
-  в строке над панелью — внутри защищённого окна. В заголовок *окна* он
-  попадает, только если включить **Show Pane Title in Window Title**
-  (по умолчанию выключено): заголовок окна виден вне окна — в меню иконки
-  в Dock, Mission Control, клиентам Accessibility и в списке окон
-  (`kCGWindowName`) у приложений с правом Screen Recording, а многие
-  настройки zsh/bash пишут в заголовок текущую команду целиком, вместе с
-  паролем, если он был в командной строке.
+- **Links** (⌘-click, including OSC 8, where the program sets both the
+  link text and its address): only `http`, `https` and `mailto` are
+  opened. Files, applications and arbitrary URL schemes are not
+  (`file:///…/x.command` would run a script) — a beep sounds instead. An
+  allowed link opens only after confirmation in a sheet that shows its
+  real address (percent-encoded, at most 1000 characters) — the link text
+  on screen may say something else.
+- **Screen contents (DECRQCRA, `CSI … y`)**: SwiftTerm answers this
+  request with a checksum of a screen rectangle, and for a single cell
+  that checksum equals the character's code — so a program (including a
+  remote server behind `ssh`) could read everything visible in the pane
+  character by character, including what was printed before it ran. This
+  cannot be turned off in SwiftTerm, so all of the program's output passes
+  through `Security/HostOutputFilter.swift`: such a request is cut off
+  (its last byte replaced with SUB) and left unanswered.
+- **Local files via Kitty graphics** (APC `G` with `t=f`, `t=t`, `t=s`):
+  such a request would make the terminal itself open a local file or
+  shared memory named by the program — a remote server would learn from
+  the reply whether you have such a file, could make the app read up to
+  400 MB, or show a permission prompt for ~/Documents in the app's name.
+  The same filter cuts such commands off (CAN before the end of the
+  sequence), and the terminal does not carry them out. Images sent inline
+  in the output (`t=d`, the default) work.
+  The filter is a shadow copy of SwiftTerm 1.20.0's parser state machine
+  (the same transition table and the same shortcuts), so it sees a
+  sequence exactly where SwiftTerm will see it, however the output is
+  split into chunks; all other output passes unchanged.
+  `HostOutputFilterTests` check this against SwiftTerm's real parser,
+  fuzzing included. When SwiftTerm is updated, the filter must be
+  re-checked — `Scripts/audit.sh` fails if the versions in `Package.swift`
+  and in the filter differ.
+- **Title (OSC 0/2)**: control characters, line breaks, bidi override
+  characters (which can reorder visible text) and invisible characters
+  (zero-width space/joiner, tag characters and the like, which can make two
+  titles look identical) are removed from it, and its length is capped at
+  200 characters. The title is shown in the bar above the pane — inside
+  the protected window. It reaches the *window* title only if **Show Pane
+  Title in Window Title** is on (off by default): the window title is
+  visible outside the window — in the Dock icon's menu, Mission Control, to
+  Accessibility clients and in the window list (`kCGWindowName`) of apps
+  with Screen Recording permission, and many zsh/bash setups write the
+  whole current command into the title, password included if it was on
+  the command line.
 
-`Scripts/audit.sh` проверяет, что фильтр установлен, OSC 52 отклоняется,
-а URL открываются только через `LinkPolicy`.
+`Scripts/audit.sh` checks that the filter is installed, OSC 52 is refused,
+and URLs are opened only through `LinkPolicy`.
 
-## Чего это не закрывает (осознанные остаточные риски)
+## What this does not cover (accepted residual risks)
 
-- **Accessibility API (AXUIElement).** Теоретически другое приложение,
-  которому пользователь сам выдал разрешение Accessibility в
-  System Settings, может прочитать текст на экране даже при включённой
-  защите от скриншотов — это другой канал, не связанный с `sharingType`.
-  Поверхность снижена тем, что SwiftTerm рисует терминал через
-  CoreText/Metal, а не через стандартный доступный `NSTextView`, но
-  полностью исключить это на уровне одного приложения нельзя.
-  Рекомендация: периодически проверять в System Settings → Privacy &
-  Security → Accessibility, каким приложениям выдан доступ.
-- **Команды, которые пользователь сам запускает в shell**, имеют те же
-  права, что и в обычном Terminal.app — само приложение не ограничивает
-  запущенный пользователем процесс (см. пункт 7 про App Sandbox).
-- **Кейлоггеры на уровне ОС, прошивки или оборудования** — вне контроля
-  любого отдельного приложения.
-- **Меню и подсказки** — отдельные системные окна, их видно на
-  скриншотах и в screen sharing (п. 1): имена избранного в меню Favorites,
-  заголовок окна, если включён **Show Pane Title in Window Title** (п. 17).
-- **Поиск (⌘F)** использует системный find pasteboard, как и любое
-  приложение macOS: искомая строка становится видна в поиске других
-  приложений. Не ищите по секретам.
-- **Перенос в документ/файл буфера обмена вручную** — если пользователь сам
-  вставит секрет в другое приложение, дальнейшая судьба этих данных уже вне
-  зоны ответственности sh_terminator.
+- **The Accessibility API (AXUIElement).** In theory another app that the
+  user has granted Accessibility permission in System Settings can read
+  on-screen text even with screenshot protection on — that is a separate
+  channel, unrelated to `sharingType`. The surface is reduced because
+  SwiftTerm draws the terminal with CoreText/Metal rather than a standard
+  accessible `NSTextView`, but a single app cannot rule it out entirely.
+  Recommendation: periodically review which apps have access under System
+  Settings → Privacy & Security → Accessibility.
+- **Commands the user runs in the shell** have the same rights as in
+  plain Terminal.app — the app does not restrict processes the user starts
+  (see §7 on App Sandbox).
+- **Keyloggers at the OS, firmware or hardware level** — beyond the
+  control of any single app.
+- **Menus and tooltips** are separate system windows, visible in
+  screenshots and screen sharing (§1): favorites' names in the Favorites
+  menu, and the window title if **Show Pane Title in Window Title** is on
+  (§17).
+- **Find (⌘F)** uses the system find pasteboard, like any macOS app: the
+  search string becomes visible in other apps' find fields. Do not search
+  for secrets.
+- **Moving clipboard contents into a document or file by hand** — if the
+  user pastes a secret into another app, what happens to it from then on
+  is outside sh_terminator's responsibility.
 
-## Что НЕ будет добавлено без отдельного явного запроса
+## What will NOT be added without a separate explicit request
 
-Автообновление, телеметрия/аналитика любого вида, крашрепортер, облачная
-синхронизация настроек/сессий, экспорт логов по умолчанию (включение — explicit
-opt-in и только в путь, выбранный пользователем).
+Auto-update, telemetry/analytics of any kind, a crash reporter, cloud sync
+of settings/sessions, session log export by default (enabling it must be
+an explicit opt-in, and only to a path the user chooses).

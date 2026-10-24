@@ -11,8 +11,6 @@ Panes like iTerm2 or tmux, plus protection a regular terminal doesn't give you: 
 ![Dependencies](https://img.shields.io/badge/dependencies-1%20(SwiftTerm%2C%20pinned)-blue)
 ![Network](https://img.shields.io/badge/network-none-success)
 
-<img src="docs/screenshots/panes.png" alt="Three panes: a file listing, top and ping, with the favorites sidebar and notes on the right" width="900">
-
 </div>
 
 ---
@@ -94,7 +92,6 @@ Templates are under **File → New Window From Template** (2, 4, 6, 8 or 10 pane
 
 ## Broadcast input
 
-<img src="docs/screenshots/broadcast.png" alt="Four panes with red BROADCAST headers, all showing the same command" width="900">
 
 Turn it on with <kbd>⌥⌘I</kbd>, and whatever you type or paste into one pane goes to every pane in that window. While it's on, the pane headers turn red and say **BROADCAST**.
 
@@ -103,7 +100,6 @@ Turn it on with <kbd>⌥⌘I</kbd>, and whatever you type or paste into one pane
 
 ## Favorite commands
 
-<img src="docs/screenshots/favorites.png" alt="The placeholder form asking for host, user and database before inserting a psql command" width="900">
 
 The **Favorites** menu holds commands you use often, like connecting to a remote database. Choosing one, or pressing <kbd>⌘1</kbd>…<kbd>⌘9</kbd>, **inserts** it into the active pane but doesn't run it. You press Return yourself, so you can edit it first.
 
@@ -131,7 +127,6 @@ Below the favorites in the sidebar is a **Notes** box: a plain text field for pa
 
 ## Security
 
-<img src="docs/screenshots/lock.png" alt="The lock screen hiding a window's panes until Touch ID or a password unlocks it" width="900">
 
 Settings in the **sh_terminator** app menu:
 
