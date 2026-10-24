@@ -47,9 +47,7 @@ final class NotesPanel: NSObject, NSTextViewDelegate {
     // MARK: - UI
 
     private func buildUI() {
-        let title = NSTextField(labelWithString: "NOTES")
-        title.font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .semibold)
-        title.textColor = .secondaryLabelColor
+        let title = Theme.sectionLabel("NOTES")
 
         let copy = headerButton("doc.on.doc", "Copy All Notes", #selector(copyAll(_:)))
         let clear = headerButton("trash", "Clear Notes (⌘Z to undo)", #selector(clearAll(_:)))
@@ -73,13 +71,17 @@ final class NotesPanel: NSObject, NSTextViewDelegate {
         textView.isRichText = false
         textView.importsGraphics = false
         textView.allowsUndo = true
-        textView.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
+        textView.font = Theme.mono(NSFont.smallSystemFontSize)
+        textView.textColor = Theme.terminalText
+        textView.insertionPointColor = Theme.red
+        textView.selectedTextAttributes = [.backgroundColor: Theme.selection, .foregroundColor: Theme.hot]
         textView.textContainerInset = NSSize(width: 4, height: 4)
         // Notes will often hold commands, keys or passwords.
         SecurityHardening.disableTextRewriting(in: textView)
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = true
-        textView.backgroundColor = NSColor.textBackgroundColor.withAlphaComponent(0.5)
+        textView.backgroundColor = Theme.background
+        scrollView.backgroundColor = Theme.background
 
         for subview in [header, scrollView] {
             subview.translatesAutoresizingMaskIntoConstraints = false
@@ -99,10 +101,8 @@ final class NotesPanel: NSObject, NSTextViewDelegate {
     }
 
     private func headerButton(_ symbol: String, _ tip: String, _ action: Selector) -> NSButton {
-        let button = NSButton(image: NSImage(systemSymbolName: symbol, accessibilityDescription: tip)!, target: self, action: action)
-        button.isBordered = false
+        let button = Theme.iconButton(symbol, tip, target: self, action: action)
         button.toolTip = tip
-        button.refusesFirstResponder = true
         return button
     }
 }

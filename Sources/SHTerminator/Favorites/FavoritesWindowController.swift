@@ -44,6 +44,7 @@ final class FavoritesWindowController: NSWindowController, NSWindowDelegate, NST
         panel.title = "Favorites"
         panel.minSize = NSSize(width: 640, height: 260)
         panel.hidesOnDeactivate = false
+        Theme.style(window: panel)
         super.init(window: panel)
         panel.delegate = self
         // Commands may well contain hostnames, users or other sensitive bits.
@@ -98,7 +99,8 @@ final class FavoritesWindowController: NSWindowController, NSWindowDelegate, NST
         categoryColumn.title = "Categories"
         categoryTable.addTableColumn(categoryColumn)
         categoryTable.headerView = nil
-        categoryTable.style = .sourceList
+        categoryTable.style = .plain
+        categoryTable.backgroundColor = Theme.panel
         categoryTable.allowsMultipleSelection = false
         categoryTable.allowsEmptySelection = false
         categoryTable.dataSource = self
@@ -137,7 +139,7 @@ final class FavoritesWindowController: NSWindowController, NSWindowDelegate, NST
         tableView.addTableColumn(movesColumn)
         tableView.addTableColumn(commandColumn)
         tableView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
-        tableView.usesAlternatingRowBackgroundColors = true
+        tableView.backgroundColor = Theme.background
         tableView.allowsMultipleSelection = false
         tableView.dataSource = self
         tableView.delegate = self
@@ -159,8 +161,8 @@ final class FavoritesWindowController: NSWindowController, NSWindowDelegate, NST
         removeButton.action = #selector(removeFavorite(_:))
 
         let hint = NSTextField(labelWithString: "Commands are inserted at the prompt, never run. Press Return in the terminal yourself.")
-        hint.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        hint.textColor = .secondaryLabelColor
+        hint.font = Theme.mono(10)
+        hint.textColor = Theme.muted
         hint.lineBreakMode = .byTruncatingTail
         hint.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
@@ -315,6 +317,10 @@ final class FavoritesWindowController: NSWindowController, NSWindowDelegate, NST
         tableView === categoryTable ? store.sections.count : shown.count
     }
 
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        ThemedRowView()
+    }
+
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         guard let column = tableColumn?.identifier else { return nil }
         if column == Self.movesColumn {
@@ -334,13 +340,16 @@ final class FavoritesWindowController: NSWindowController, NSWindowDelegate, NST
         switch column {
         case Self.categoryColumn:
             field.stringValue = store.sections[row].name
-            field.font = .systemFont(ofSize: NSFont.systemFontSize)
+            field.font = Theme.mono(12, .semibold)
+            field.textColor = Theme.red
         case Self.nameColumn:
             field.stringValue = shown[row].name
-            field.font = .systemFont(ofSize: NSFont.systemFontSize)
+            field.font = Theme.mono(12, .semibold)
+            field.textColor = Theme.red
         default:
             field.stringValue = shown[row].command
-            field.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+            field.font = Theme.mono(12)
+            field.textColor = Theme.terminalText
         }
         return field
     }
@@ -351,7 +360,7 @@ final class FavoritesWindowController: NSWindowController, NSWindowDelegate, NST
             popup.identifier = Self.movesColumn
             popup.isBordered = false
             popup.controlSize = .small
-            popup.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+            popup.font = Theme.mono(10)
             popup.target = self
             popup.action = #selector(categoryPicked(_:))
             return popup

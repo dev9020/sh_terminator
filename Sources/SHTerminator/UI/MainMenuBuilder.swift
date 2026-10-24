@@ -52,6 +52,7 @@ enum MainMenuBuilder {
         appMenu.addItem(item("Hide Windows When in Background", #selector(AppDelegate.toggleHideWhenInactive(_:)), "", target: appDelegate))
         appMenu.addItem(item("Show Pane Title in Window Title", #selector(AppDelegate.togglePaneTitleInWindowTitle(_:)), "", target: appDelegate))
         appMenu.addItem(item("Keep Notes Across Restarts", #selector(AppDelegate.togglePersistNotes(_:)), "", target: appDelegate))
+        appMenu.addItem(item("Show Launcher at Startup", #selector(AppDelegate.toggleLauncher(_:)), "", target: appDelegate))
         appMenu.addItem(.separator())
         appMenu.addItem(item("Quit \(appName)", #selector(NSApplication.terminate(_:)), "q"))
 

@@ -18,6 +18,7 @@ enum AppSettings {
         static let paneTitleInWindowTitle = "paneTitleInWindowTitle"
         static let persistNotes = "persistNotes"
         static let fontSize = "fontSize"
+        static let showLauncher = "showLauncher"
     }
 
     static func registerDefaults() {
@@ -29,6 +30,7 @@ enum AppSettings {
             Key.paneTitleInWindowTitle: false,
             Key.persistNotes: true,
             Key.fontSize: 0.0,
+            Key.showLauncher: true,
         ])
     }
 
@@ -78,6 +80,13 @@ enum AppSettings {
     static var fontSize: CGFloat {
         get { CGFloat(defaults.double(forKey: Key.fontSize)) }
         set { set(Double(newValue), for: Key.fontSize) }
+    }
+
+    /// Start with the `Launcher` (boot screen + layout choice) instead of
+    /// opening a single-pane window straight away.
+    static var showLauncher: Bool {
+        get { defaults.bool(forKey: Key.showLauncher) }
+        set { set(newValue, for: Key.showLauncher) }
     }
 
     private static func set(_ value: Any, for key: String) {

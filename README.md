@@ -158,7 +158,7 @@ Sources/SHTerminator/
   Layout/SplitPaneController.swift tree → live NSSplitView hierarchy, navigation, broadcast
   Layout/PaneContainerView.swift   pane = header + terminal
   Layout/PaneTemplates.swift       ready-made 2/4/6/8/10-pane layouts
-  UI/                              window, menus, equal-split NSSplitView
+  UI/                              window, menus, equal-split NSSplitView, launcher, theme
   Favorites/                       store, menu, manager window, sidebar, placeholders
   Notes/                           notes box and its store
   Settings/AppSettings.swift       the few settings (UserDefaults)

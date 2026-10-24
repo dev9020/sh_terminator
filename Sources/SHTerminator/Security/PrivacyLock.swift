@@ -132,9 +132,9 @@ final class LockScreenView: NSView {
 
         let icon = NSImageView(image: NSImage(systemSymbolName: "lock.fill", accessibilityDescription: "Locked")!)
         icon.symbolConfiguration = .init(pointSize: 40, weight: .regular)
-        icon.contentTintColor = .secondaryLabelColor
-        titleLabel.font = .systemFont(ofSize: 15, weight: .medium)
-        titleLabel.textColor = .secondaryLabelColor
+        icon.contentTintColor = Theme.red
+        titleLabel.font = Theme.mono(14, .bold)
+        titleLabel.textColor = Theme.red
         unlockButton.bezelStyle = .rounded
         unlockButton.keyEquivalent = "\r"
         unlockButton.target = self
@@ -156,14 +156,14 @@ final class LockScreenView: NSView {
     }
 
     func update(for state: PrivacyLock.State) {
-        titleLabel.stringValue = state == .locked ? "Locked" : "Hidden while sh_terminator is in the background"
+        titleLabel.stringValue = state == .locked ? "// LOCKED" : "// HIDDEN WHILE SH_TERMINATOR IS IN THE BACKGROUND"
         unlockButton.isHidden = state != .locked
     }
 
     override var isOpaque: Bool { true }
 
     override func updateLayer() {
-        layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        layer?.backgroundColor = Theme.background.cgColor
     }
 
     override var acceptsFirstResponder: Bool { true }

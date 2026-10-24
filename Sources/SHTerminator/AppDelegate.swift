@@ -11,10 +11,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let favoritesMenu = FavoritesMenu(appDelegate: self)
         self.favoritesMenu = favoritesMenu
+        Theme.applyToApp()
         NSApp.mainMenu = MainMenuBuilder.build(appDelegate: self, favoritesMenu: favoritesMenu.menu)
         PrivacyLock.shared.start()
         NotificationCenter.default.addObserver(self, selector: #selector(privacyLockDidChange(_:)), name: PrivacyLock.didChange, object: nil)
-        openWindow(root: PaneTemplates.single())
+        if AppSettings.showLauncher {
+            Launcher.show { [weak self] layout in self?.openWindow(root: layout.makeRoot()) }
+        } else {
+            openWindow(root: PaneTemplates.single())
+        }
         // Activation may already have happened before launch finished.
         SecurityHardening.updateSecureKeyboardEntry()
     }
@@ -122,6 +127,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NotesStore.shared.persistenceSettingChanged()
     }
 
+    @objc func toggleLauncher(_ sender: Any?) {
+        AppSettings.showLauncher.toggle()
+    }
+
     @objc func increaseFontSize(_ sender: Any?) { changeFontSize(by: 1) }
     @objc func decreaseFontSize(_ sender: Any?) { changeFontSize(by: -1) }
 
@@ -156,6 +165,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             menuItem.state = AppSettings.paneTitleInWindowTitle ? .on : .off
         case #selector(togglePersistNotes(_:)):
             menuItem.state = AppSettings.persistNotes ? .on : .off
+        case #selector(toggleLauncher(_:)):
+            menuItem.state = AppSettings.showLauncher ? .on : .off
         case #selector(lockNow(_:)):
             return PrivacyLock.shared.state != .locked
         default:

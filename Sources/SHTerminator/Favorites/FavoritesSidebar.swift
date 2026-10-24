@@ -65,15 +65,10 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
     // MARK: - UI
 
     private func buildUI() {
-        let title = NSTextField(labelWithString: "FAVORITES")
-        title.font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .semibold)
-        title.textColor = .secondaryLabelColor
+        let title = Theme.sectionLabel("FAVORITES")
 
-        let manage = NSButton(image: NSImage(systemSymbolName: "pencil", accessibilityDescription: "Manage Favorites")!, target: nil, action: #selector(AppDelegate.showFavorites(_:)))
-        manage.target = AppDelegate.shared
-        manage.isBordered = false
+        let manage = Theme.iconButton("pencil", "Manage Favorites", target: AppDelegate.shared, action: #selector(AppDelegate.showFavorites(_:)))
         manage.toolTip = "Manage Favorites… (⌘⇧F)"
-        manage.refusesFirstResponder = true
 
         let header = NSStackView(views: [title, NSView(), manage])
         header.orientation = .horizontal
@@ -81,7 +76,7 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
 
         searchField.placeholderString = "Filter"
         searchField.controlSize = .small
-        searchField.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        searchField.font = Theme.mono(NSFont.smallSystemFontSize)
         searchField.delegate = self
         // Same rule as the notes: what's typed here stays put.
         searchField.isAutomaticTextCompletionEnabled = false
@@ -89,7 +84,9 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("favorite"))
         tableView.addTableColumn(column)
         tableView.headerView = nil
-        tableView.style = .sourceList
+        tableView.style = .plain
+        tableView.backgroundColor = .clear
+        tableView.floatsGroupRows = false
         tableView.rowHeight = 40
         tableView.refusesFirstResponder = true
         tableView.dataSource = self
@@ -103,13 +100,13 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
 
-        emptyLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        emptyLabel.textColor = .secondaryLabelColor
+        emptyLabel.font = Theme.mono(10)
+        emptyLabel.textColor = Theme.muted
         emptyLabel.alignment = .center
 
-        let background = NSVisualEffectView()
-        background.material = .sidebar
-        background.blendingMode = .behindWindow
+        let background = NSView()
+        background.wantsLayer = true
+        background.layer?.backgroundColor = Theme.panel.cgColor
 
         let favoritesPane = NSView()
         let listStack = NSStackView(views: [searchField, scroll])
@@ -185,6 +182,10 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
         !self.tableView(tableView, isGroupRow: row)
     }
 
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        ThemedRowView()
+    }
+
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
         self.tableView(tableView, isGroupRow: row) ? 22 : tableView.rowHeight
     }
@@ -193,7 +194,7 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
         guard case .favorite(let index, let favorite) = rows[row] else {
             guard case .heading(let title) = rows[row] else { return nil }
             let heading = (tableView.makeView(withIdentifier: HeadingCell.identifier, owner: self) as? HeadingCell) ?? HeadingCell()
-            heading.label.stringValue = title
+            heading.label.stringValue = "▸ " + title.uppercased()
             return heading
         }
         let cell = (tableView.makeView(withIdentifier: FavoriteCell.identifier, owner: self) as? FavoriteCell) ?? FavoriteCell()
@@ -215,10 +216,11 @@ private final class FavoriteCell: NSTableCellView {
         super.init(frame: .zero)
         identifier = Self.identifier
 
-        nameLabel.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .medium)
+        nameLabel.font = Theme.mono(12, .semibold)
+        nameLabel.textColor = Theme.red
         nameLabel.lineBreakMode = .byTruncatingTail
-        commandLabel.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
-        commandLabel.textColor = .secondaryLabelColor
+        commandLabel.font = Theme.mono(10)
+        commandLabel.textColor = Theme.muted
         commandLabel.lineBreakMode = .byTruncatingMiddle
 
         let stack = NSStackView(views: [nameLabel, commandLabel])
@@ -252,8 +254,8 @@ private final class HeadingCell: NSTableCellView {
     init() {
         super.init(frame: .zero)
         identifier = Self.identifier
-        label.font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .semibold)
-        label.textColor = .secondaryLabelColor
+        label.font = Theme.mono(10, .bold)
+        label.textColor = Theme.muted
         label.lineBreakMode = .byTruncatingTail
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -272,7 +274,7 @@ private final class HeadingCell: NSTableCellView {
 
 /// A two-pane `NSSplitView` that puts its divider at `firstFraction` of its
 /// size on first layout, then behaves like a normal draggable split view.
-private final class FractionSplitView: NSSplitView {
+private final class FractionSplitView: ThemedSplitView {
     private let firstFraction: CGFloat
     private var didSetInitialPosition = false
 

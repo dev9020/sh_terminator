@@ -3,18 +3,8 @@ import AppKit
 /// An `NSSplitView` that starts with its dividers spaced evenly between
 /// however many subviews it was given, then behaves like a normal,
 /// freely-draggable split view from that point on.
-final class EqualSplitView: NSSplitView {
+final class EqualSplitView: ThemedSplitView {
     private var didSetInitialPositions = false
-
-    /// The stock thin divider is barely visible against dark terminal
-    /// backgrounds, and horizontal ones don't show up at all. Paint every
-    /// divider explicitly in one solid colour, whatever the orientation.
-    override var dividerColor: NSColor { .tertiaryLabelColor }
-
-    override func drawDivider(in rect: NSRect) {
-        dividerColor.setFill()
-        rect.fill()
-    }
 
     override func layout() {
         super.layout()

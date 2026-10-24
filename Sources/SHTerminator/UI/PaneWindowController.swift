@@ -6,7 +6,7 @@ import AppKit
 final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitViewDelegate, NSMenuItemValidation {
     let splitController: SplitPaneController
     private let favoritesSidebar = FavoritesSidebar()
-    private let sidebarSplit = NSSplitView()
+    private let sidebarSplit = ThemedSplitView()
     private let lockScreen = LockScreenView()
     private var clickMonitor: Any?
     /// Set once the user agreed to close despite running programs, so the
@@ -28,6 +28,7 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             defer: false
         )
         window.title = Self.baseTitle
+        Theme.style(window: window)
         // Panes on the left, the favorites sidebar (one per window, shared by
         // all panes) on the right. The sidebar holds its width when the window
         // resizes. Both holding priorities must stay below the divider-drag

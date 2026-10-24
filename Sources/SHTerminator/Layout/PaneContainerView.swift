@@ -17,7 +17,7 @@ final class PaneContainerView: NSView {
         layer?.borderWidth = 2
 
         header.wantsLayer = true
-        titleLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        titleLabel.font = Theme.mono(10, .medium)
         titleLabel.lineBreakMode = .byTruncatingMiddle
         titleLabel.alignment = .center
         // Below NSSplitView's holding priority (250): otherwise the label's
@@ -54,11 +54,12 @@ final class PaneContainerView: NSView {
     }
 
     func update(title: String, focused: Bool, broadcasting: Bool) {
-        titleLabel.stringValue = broadcasting ? "⦿ BROADCAST · " + title : title
-        titleLabel.textColor = focused ? .labelColor : .secondaryLabelColor
+        let marker = focused ? "▸ " : ""
+        titleLabel.stringValue = broadcasting ? "⦿ BROADCAST · " + title : marker + title
+        titleLabel.textColor = broadcasting || focused ? Theme.hot : Theme.muted
         header.layer?.backgroundColor = broadcasting
-            ? NSColor.systemRed.withAlphaComponent(0.25).cgColor
-            : NSColor.windowBackgroundColor.cgColor
-        layer?.borderColor = focused ? NSColor.controlAccentColor.cgColor : NSColor.clear.cgColor
+            ? Theme.red.withAlphaComponent(0.35).cgColor
+            : focused ? Theme.red.withAlphaComponent(0.14).cgColor : Theme.panel.cgColor
+        layer?.borderColor = focused ? Theme.red.cgColor : Theme.background.cgColor
     }
 }

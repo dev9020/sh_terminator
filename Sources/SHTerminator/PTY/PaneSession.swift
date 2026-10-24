@@ -28,6 +28,7 @@ final class PaneSession: NSObject, LocalProcessTerminalViewDelegate {
         terminalView = TerminalPaneView(frame: .zero)
         super.init()
         terminalView.processDelegate = self
+        Theme.style(terminal: terminalView)
         applyFontSize()
         startShell(in: currentDirectory ?? NSHomeDirectory())
     }
