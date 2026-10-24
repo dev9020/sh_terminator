@@ -211,6 +211,13 @@ final class TerminalPaneView: LocalProcessTerminalView {
                 case 0:
                     self.sendPaste(PastePolicy.joiningLines(text))
                 case 1:
+                    if claimsBracketedPaste && !self.getTerminal().bracketedPasteMode {
+                        // The program turned bracketed paste off while the
+                        // question was up: "As Is" would now run every line.
+                        // Ask again, for what the pane does now.
+                        self.pasteAfterCheck(text)
+                        return
+                    }
                     // "As Is" vouches only for this pane's program.
                     self.sendPaste(text, runsLines: true, relaysRunsLines: claimsBracketedPaste ? false : nil)
                 default:

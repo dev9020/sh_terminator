@@ -111,10 +111,29 @@ final class NotesPanel: NSObject, NSTextViewDelegate {
 /// The notes' text view, kept to plain editing: no Services (which hand the
 /// selection to other apps) and a context menu with only Cut, Copy, Paste
 /// and Select All — no Look Up, Translate, Share, Speech or Writing Tools.
+/// Copy and Cut put the text on the clipboard as a secret, like the "copy
+/// all" button: notes often hold passwords or seed phrases.
 private final class NotesTextView: NSTextView {
     private static let contextActions: Set<Selector> = [
         #selector(cut(_:)), #selector(copy(_:)), #selector(paste(_:)), #selector(selectAll(_:)),
     ]
+
+    private var selectedText: String {
+        let text = string as NSString
+        return selectedRanges.map { text.substring(with: $0.rangeValue) }.joined(separator: "\n")
+    }
+
+    override func copy(_ sender: Any?) {
+        SecurityHardening.copySecret(selectedText, clearAfter: 20)
+    }
+
+    override func cut(_ sender: Any?) {
+        let text = selectedText
+        guard !text.isEmpty else { return }
+        SecurityHardening.copySecret(text, clearAfter: 20)
+        // Through the normal editing path, so ⌘Z brings it back.
+        delete(sender)
+    }
 
     override func validRequestor(forSendType sendType: NSPasteboard.PasteboardType?, returnType: NSPasteboard.PasteboardType?) -> Any? {
         nil

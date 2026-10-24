@@ -55,6 +55,17 @@ import Testing
     }
 }
 
+@Suite struct WeakenedProtectionsTests {
+    @Test func defaultsWeakenNothing() {
+        #expect(AppSettings.weakenedProtections(secureKeyboardEntry: true, lockOnSleep: true, paneTitleInWindowTitle: false).isEmpty)
+    }
+
+    @Test func eachWeakenedSwitchIsShown() {
+        #expect(AppSettings.weakenedProtections(secureKeyboardEntry: false, lockOnSleep: false, paneTitleInWindowTitle: true).count == 3)
+        #expect(AppSettings.weakenedProtections(secureKeyboardEntry: false, lockOnSleep: true, paneTitleInWindowTitle: false) == ["SECURE KEYBOARD ENTRY OFF"])
+    }
+}
+
 @Suite struct RunningProgramsTests {
     @Test func describesOneOrMany() {
         #expect(RunningPrograms.describe(["ssh"]) == "ssh is still running.")

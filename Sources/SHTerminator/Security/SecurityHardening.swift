@@ -74,10 +74,14 @@ enum SecurityHardening {
     /// sooner (`clearSecretFromClipboard`): a timer doesn't outlive the app.
     static func copySecret(_ string: String, clearAfter seconds: TimeInterval? = nil, pasteboard: NSPasteboard = .general) {
         guard !string.isEmpty else { return }
+        // One item written in one call: the text never shows up on the
+        // clipboard, for a clipboard manager to record, before its markers.
+        let item = NSPasteboardItem()
+        item.setString("", forType: concealedType)
+        item.setString("", forType: transientType)
+        item.setString(string, forType: .string)
         pasteboard.prepareForNewContents(with: .currentHostOnly)
-        pasteboard.setString(string, forType: .string)
-        pasteboard.setString("", forType: concealedType)
-        pasteboard.setString("", forType: transientType)
+        pasteboard.writeObjects([item])
         let ownChange = pasteboard.changeCount
         lastSecret = (pasteboard, ownChange)
 

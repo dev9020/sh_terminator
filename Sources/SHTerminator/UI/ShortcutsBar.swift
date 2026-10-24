@@ -2,7 +2,9 @@ import AppKit
 
 /// A one-line list of the main keyboard shortcuts along the bottom of a
 /// terminal window, under both the panes and the favorites sidebar. Fixed
-/// text only. View → Show Shortcuts Bar (⌘/) turns it off.
+/// text only. View → Show Shortcuts Bar (⌘/) turns the list off; protections
+/// that are off (`AppSettings.weakenedProtections`) are always shown in it,
+/// as the settings can be changed from outside the app.
 final class ShortcutsBar: NSView {
     static let height: CGFloat = 22
 
@@ -34,7 +36,6 @@ final class ShortcutsBar: NSView {
         border.translatesAutoresizingMaskIntoConstraints = false
         addSubview(border)
 
-        label.attributedStringValue = Self.text()
         label.maximumNumberOfLines = 1
         label.toolTip = Self.shortcuts.map { "\($0.0)  \($0.1)" }.joined(separator: "\n")
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -55,14 +56,26 @@ final class ShortcutsBar: NSView {
         fatalError("init(coder:) is not used")
     }
 
-    private static func text() -> NSAttributedString {
+    func update(showsShortcuts: Bool, weakened: [String]) {
+        label.attributedStringValue = Self.text(showsShortcuts: showsShortcuts, weakened: weakened)
+    }
+
+    private static func text(showsShortcuts: Bool, weakened: [String]) -> NSAttributedString {
         let style = NSMutableParagraphStyle()
         style.lineBreakMode = .byTruncatingTail
         let key: [NSAttributedString.Key: Any] = [.font: Theme.mono(10, .bold), .foregroundColor: Theme.red, .paragraphStyle: style]
         let description: [NSAttributedString.Key: Any] = [.font: Theme.mono(10), .foregroundColor: Theme.muted, .paragraphStyle: style]
         let separator: [NSAttributedString.Key: Any] = [.font: Theme.mono(10), .foregroundColor: Theme.dimRed, .paragraphStyle: style]
 
-        let text = NSMutableAttributedString(string: "// KEYS  ", attributes: key)
+        let warning: [NSAttributedString.Key: Any] = [.font: Theme.mono(10, .bold), .foregroundColor: Theme.hot, .paragraphStyle: style]
+
+        let text = NSMutableAttributedString()
+        if !weakened.isEmpty {
+            text.append(NSAttributedString(string: "⚠ " + weakened.joined(separator: " · "), attributes: warning))
+            if showsShortcuts { text.append(NSAttributedString(string: "  //  ", attributes: separator)) }
+        }
+        guard showsShortcuts else { return text }
+        text.append(NSAttributedString(string: "// KEYS  ", attributes: key))
         for (index, (keys, action)) in shortcuts.enumerated() {
             if index > 0 { text.append(NSAttributedString(string: "  ·  ", attributes: separator)) }
             text.append(NSAttributedString(string: keys, attributes: key))
@@ -89,12 +102,13 @@ final class WindowContentView: NSView {
         fatalError("init(coder:) is not used")
     }
 
-    var showsShortcutsBar: Bool {
-        get { !shortcutsBar.isHidden }
-        set {
-            shortcutsBar.isHidden = !newValue
-            placeSubviews()
-        }
+    /// Shows the shortcuts per `AppSettings.showShortcutsBar`, and the bar
+    /// itself whenever there is that or a weakened protection to show.
+    @MainActor func updateShortcutsBar() {
+        let weakened = AppSettings.weakenedProtections
+        shortcutsBar.update(showsShortcuts: AppSettings.showShortcutsBar, weakened: weakened)
+        shortcutsBar.isHidden = !AppSettings.showShortcutsBar && weakened.isEmpty
+        placeSubviews()
     }
 
     override func resizeSubviews(withOldSize oldSize: NSSize) {

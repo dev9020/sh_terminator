@@ -89,6 +89,21 @@ import Testing
         }
     }
 
+    @Test @MainActor func textAndMarkersArriveAsOneItem() async {
+        await withPasteboard { pasteboard in
+            SecurityHardening.copySecret("seed words", pasteboard: pasteboard)
+            let items = pasteboard.pasteboardItems ?? []
+            #expect(items.count == 1)
+            let types = Set(items.first?.types ?? [])
+            #expect(types.isSuperset(of: [
+                .string,
+                NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"),
+                NSPasteboard.PasteboardType("org.nspasteboard.TransientType"),
+            ]))
+            #expect(pasteboard.string(forType: .string) == "seed words")
+        }
+    }
+
     @Test @MainActor func lockAndQuitClearTheLastSecret() async {
         await withPasteboard { pasteboard in
             // Without a timer (or before it fires): what locking and quitting call.

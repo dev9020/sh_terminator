@@ -42,9 +42,14 @@ final class PrivacyLock {
             self?.lastActivity = Date()
             return event
         }
-        idleTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+        let idleTimer = Timer(timeInterval: 10, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.lockIfIdle() }
         }
+        // Common modes: a timer in the default mode alone stops firing while
+        // a menu is open or a modal alert (Quit?) is up — leaving the Mac
+        // like that would keep it from ever locking.
+        RunLoop.main.add(idleTimer, forMode: .common)
+        self.idleTimer = idleTimer
 
         let workspace = NSWorkspace.shared.notificationCenter
         let distributed = DistributedNotificationCenter.default()

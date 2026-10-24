@@ -43,7 +43,7 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         sidebarSplit.setHoldingPriority(NSLayoutConstraint.Priority(250), forSubviewAt: 0)
         sidebarSplit.setHoldingPriority(NSLayoutConstraint.Priority(260), forSubviewAt: 1)
         window.contentView = content
-        content.showsShortcutsBar = AppSettings.showShortcutsBar
+        content.updateShortcutsBar()
         sidebarSplit.layoutSubtreeIfNeeded()
         sidebarSplit.setPosition(sidebarSplit.bounds.width - Self.sidebarWidth, ofDividerAt: 0)
         window.center()
@@ -124,7 +124,7 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     @objc private func settingsDidChange(_ notification: Notification) {
         updateWindowTitle()
-        content.showsShortcutsBar = AppSettings.showShortcutsBar
+        content.updateShortcutsBar()
     }
 
     // MARK: - Privacy lock

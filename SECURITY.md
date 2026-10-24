@@ -168,7 +168,8 @@ handy for pasting a password or seed phrase without it lingering in the
 clipboard. Plain ⌘C keeps working as always — this is an extra command,
 not a restriction.
 
-Besides the timer, such a copy (and the "copy all" button in the notes):
+Besides the timer, such a copy (and the "copy all" button, ⌘C and ⌘X in
+the notes) — written as one item, text and markers together:
 - is marked with the `org.nspasteboard.ConcealedType` and
   `org.nspasteboard.TransientType` types (nspasteboard.org) — clipboard
   managers (Maccy, Paste, Raycast, Alfred, 1Password…) do not save such
@@ -176,8 +177,8 @@ Besides the timer, such a copy (and the "copy all" button in the notes):
 - is put on the clipboard with `NSPasteboard.ContentsOptions.currentHostOnly`
   — it is not passed through Universal Clipboard to an iPhone/iPad/other Mac.
 
-The notes' "copy all" button clears the clipboard after 20 seconds as
-well. Locking (§14) and quitting the app clear such a copy at once,
+Copying from the notes (the "copy all" button, ⌘C, ⌘X) clears the
+clipboard after 20 seconds as well. Locking (§14) and quitting the app clear such a copy at once,
 without waiting for the timer (which would not outlive the app anyway).
 
 The clear only happens if the clipboard has not changed since
@@ -249,6 +250,15 @@ Check (with the sh_terminator window active):
 ```
 ioreg -l -w 0 | grep kCGSSessionSecureInputPID   # = PID of the SHTerminator process
 ```
+The app's settings (this one included) live in
+`~/Library/Preferences/dev.local.shterminator.plist`, which any process of
+your user can change. So they are read once at launch (a running app can't
+be switched off from outside), launch arguments such as
+`-secureKeyboardEntry NO` are ignored, and a protection that is weaker
+than its default — Secure Keyboard Entry off, Lock When Mac Sleeps off,
+Show Pane Title in Window Title on — is shown in red at the bottom of every
+window, even with the shortcuts bar turned off.
+
 Side effect: while the window is active, global hotkeys and auto-typing of
 some third-party apps (text expanders, password managers' auto-type) may
 not work — this is intended.
@@ -256,7 +266,8 @@ not work — this is intended.
 ### 14. Window lock
 
 - **Lock Now** (⌃⌘L), **Auto-Lock** (after 1/5/15/30 minutes without
-  input in this app) or **Lock When Mac Sleeps or Screen Locks** (on by
+  input in this app; the check keeps running while a menu or an alert is
+  open) or **Lock When Mac Sleeps or Screen Locks** (on by
   default: the Mac sleeping, the displays sleeping, the screen being
   locked, switching to another user): every window removes its panes and
   sidebar entirely and shows an opaque lock screen. The shells keep
@@ -303,6 +314,8 @@ Text is checked before it is pasted (`Security/PastePolicy.swift`):
   REPL, `sh`, macOS's bash 3.2) is not trusted: any output can turn it on —
   a `cat`-ed file, a remote server's banner — including just before a
   program that does not honour it and will run every line.
+  If the program turns bracketed paste off while the question is up,
+  "paste as is" asks again instead of pasting the lines as they are.
 
 The warning text never shows the clipboard contents (they may be a secret,
 and the alert is a separate window).
