@@ -146,6 +146,10 @@ private final class LockSceneView: NSView {
         for text in [statusText, threatText, hexText, footerText] {
             text.anchorPoint = .zero
         }
+        let workspace = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.screensDidWakeNotification, NSWorkspace.sessionDidBecomeActiveNotification] {
+            workspace.addObserver(self, selector: #selector(systemDidWake(_:)), name: name, object: nil)
+        }
     }
 
     required init?(coder: NSCoder) {
@@ -402,6 +406,18 @@ private final class LockSceneView: NSView {
     }
 
     @objc private func occlusionDidChange(_ notification: Notification) {
+        updateRunning()
+    }
+
+    /// While the screens sleep or the session is switched away (the Mac's
+    /// own lock screen), Core Animation can drop the layers' animations: the
+    /// rain and HUD would stay frozen while the timer still changes the
+    /// text. The scene is rebuilt, and running re-checked in case no
+    /// occlusion change was posted.
+    @objc private func systemDidWake(_ notification: Notification) {
+        rainSize = .zero
+        hudSize = .zero
+        needsLayout = true
         updateRunning()
     }
 
