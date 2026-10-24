@@ -8,6 +8,11 @@ MainActor.assumeIsolated {
     AppSettings.registerDefaults()
 }
 
+// A pane's zsh asking for the proxy in use: answer and exit, no app.
+if CommandLine.arguments.dropFirst().first == PaneProxyQuery.argument {
+    exit(MainActor.assumeIsolated { PaneProxyQuery.run() })
+}
+
 let app = NSApplication.shared
 app.delegate = AppDelegate.shared
 app.setActivationPolicy(.regular)

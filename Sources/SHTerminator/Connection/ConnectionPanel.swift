@@ -1,8 +1,9 @@
 import AppKit
 
 /// "Connection" block under the notes: the Mac's own address, whether a VPN
-/// tunnel is up (and its address in the tunnel) and the system proxy.
-/// Follows `ConnectionMonitor`, so it changes as soon as the network does.
+/// tunnel is up (and its address in the tunnel), the system proxy and the
+/// app's own proxy for the panes (`ProxyStore`). Follows `ConnectionMonitor`,
+/// so it changes as soon as the network does.
 @MainActor
 final class ConnectionPanel: NSObject {
     let view = NSView()
@@ -10,16 +11,22 @@ final class ConnectionPanel: NSObject {
     private let localValue = ConnectionPanel.valueLabel()
     private let vpnValue = ConnectionPanel.valueLabel()
     private let proxyValue = ConnectionPanel.valueLabel()
+    private let panesValue = ConnectionPanel.valueLabel()
 
     override init() {
         super.init()
         buildUI()
         update()
         NotificationCenter.default.addObserver(self, selector: #selector(monitorDidChange(_:)), name: ConnectionMonitor.didChange, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(monitorDidChange(_:)), name: ProxyStore.didChange, object: nil)
     }
 
     @objc private func monitorDidChange(_ notification: Notification) {
         update()
+    }
+
+    @objc private func showProxy(_ sender: Any?) {
+        AppDelegate.shared.showProxy(sender)
     }
 
     @objc private func refresh(_ sender: Any?) {
@@ -32,6 +39,16 @@ final class ConnectionPanel: NSObject {
         set(vpnValue, snapshot.vpn.isEmpty ? nil : snapshot.vpn.map { Self.describe($0) }.joined(separator: "\n"), off: "off")
         let proxies = snapshot.proxies.map { $0.endpoint.isEmpty ? $0.kind : "\($0.kind) \($0.endpoint)" }
         set(proxyValue, proxies.isEmpty ? nil : proxies.joined(separator: "\n"), off: "off")
+        set(panesValue, Self.describePaneProxy(), off: ProxyStore.shared.unavailableReason(loginShell: PaneSession.loginShellPath()).map { "off: \($0)" } ?? "off")
+    }
+
+    /// The app's own proxy for the panes (`ProxyStore`), nil when off.
+    private static func describePaneProxy() -> String? {
+        let store = ProxyStore.shared
+        guard let active = store.active, !store.tools.isEmpty,
+              store.unavailableReason(loginShell: PaneSession.loginShellPath()) == nil else { return nil }
+        let tools = ProxyTool.allCases.filter { store.tools.contains($0) }.map(\.rawValue).joined(separator: " ")
+        return "\(active.scheme) \(active.address)\n\(tools)"
     }
 
     private static func describe(_ link: ConnectionSnapshot.Link) -> String {
@@ -50,7 +67,10 @@ final class ConnectionPanel: NSObject {
     private func buildUI() {
         let title = Theme.sectionLabel("CONNECTION")
         let refresh = Theme.iconButton("arrow.clockwise", "Refresh", target: self, action: #selector(refresh(_:)))
-        let header = NSStackView(views: [title, NSView(), refresh])
+        // Same panel as sh_terminator → Proxy for Panes…
+        let proxy = Theme.iconButton("network", "Proxy for Panes", target: self, action: #selector(showProxy(_:)))
+        proxy.toolTip = "Proxy for Panes…"
+        let header = NSStackView(views: [title, NSView(), proxy, refresh])
         header.orientation = .horizontal
         header.spacing = 6
         header.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 10)
@@ -58,7 +78,8 @@ final class ConnectionPanel: NSObject {
         let grid = NSGridView(views: [
             [Self.keyLabel("LAN"), localValue],
             [Self.keyLabel("VPN"), vpnValue],
-            [Self.keyLabel("PROXY"), proxyValue],
+            [Self.keyLabel("SYS PROXY"), proxyValue],
+            [Self.keyLabel("PANE PROXY"), panesValue],
         ])
         grid.rowSpacing = 6
         grid.columnSpacing = 8
@@ -95,7 +116,7 @@ final class ConnectionPanel: NSObject {
             note.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -10),
             note.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -8),
         ])
-        for label in [localValue, vpnValue, proxyValue, note] {
+        for label in [localValue, vpnValue, proxyValue, panesValue, note] {
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         }
     }

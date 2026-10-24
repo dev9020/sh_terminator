@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var windowControllers: [PaneWindowController] = []
     private var favoritesMenu: FavoritesMenu?
     private lazy var favoritesWindow = FavoritesWindowController()
+    private lazy var proxyWindow = ProxyWindowController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let favoritesMenu = FavoritesMenu(appDelegate: self)
@@ -71,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc private func privacyLockDidChange(_ notification: Notification) {
         if PrivacyLock.shared.isEngaged {
             favoritesWindow.window?.orderOut(nil)
+            proxyWindow.window?.orderOut(nil)
         }
     }
 
@@ -82,6 +84,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc func showFavorites(_ sender: Any?) {
         favoritesWindow.showWindow(nil)
+    }
+
+    @objc func showProxy(_ sender: Any?) {
+        proxyWindow.showWindow(nil)
     }
 
     func showFavorites(addingCommand command: String) {

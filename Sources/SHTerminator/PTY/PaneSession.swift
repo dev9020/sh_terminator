@@ -38,7 +38,7 @@ final class PaneSession: NSObject, LocalProcessTerminalViewDelegate {
         let execName = "-" + (shell as NSString).lastPathComponent
         terminalView.startIsolatedProcess(
             executable: shell,
-            environment: Self.shellEnvironment(),
+            environment: Self.shellEnvironment() + ProxyStore.shared.paneEnvironment(loginShell: shell),
             execName: execName,
             currentDirectory: directory
         )
@@ -148,7 +148,8 @@ final class PaneSession: NSObject, LocalProcessTerminalViewDelegate {
     /// directory (`/var/folders/…`, 0700), but no login shell sets it:
     /// without it, the shell and everything it runs would put their
     /// temporary files — here-docs, editor buffers — in `/tmp`, shared
-    /// with every other account on the Mac. Nothing app-specific is added.
+    /// with every other account on the Mac. Nothing app-specific is added
+    /// here; a proxy in use adds its own (`ProxyStore.paneEnvironment`).
     nonisolated static func shellEnvironment(from environment: [String: String] = ProcessInfo.processInfo.environment) -> [String] {
         var variables = Terminal.getEnvironmentVariables(termName: "xterm-256color")
         if let tmpdir = environment["TMPDIR"], !tmpdir.isEmpty {
@@ -160,7 +161,7 @@ final class PaneSession: NSObject, LocalProcessTerminalViewDelegate {
     /// Reads the user's login shell from the directory service (same source
     /// macOS's own Terminal.app uses), rather than trusting the `SHELL`
     /// environment variable, which could be altered before launch.
-    private static func loginShellPath() -> String {
+    static func loginShellPath() -> String {
         let bufsize = sysconf(_SC_GETPW_R_SIZE_MAX)
         guard bufsize != -1 else { return "/bin/zsh" }
         let buffer = UnsafeMutablePointer<Int8>.allocate(capacity: bufsize)

@@ -1,0 +1,108 @@
+#!/usr/bin/perl
+# sh_terminator: ssh's ProxyCommand for a SOCKS5 proxy with a user name and
+# password (RFC 1928, RFC 1929), which the stock `nc -X 5` can't do.
+#
+#   SHT_PROXY_URL=socks5://user:pass@host:port sht-socks5 <host> <port>
+#
+# Connects to the proxy, asks it for <host>:<port> and then copies bytes
+# between stdin/stdout (ssh) and the proxy until either side closes. The
+# server's name goes to the proxy as is, so it is looked up there, never by
+# this Mac's DNS. The URL comes from the environment, not the arguments,
+# which other users can read with `ps`. Only Perl core modules are used.
+use strict;
+use warnings;
+use IO::Socket::IP;
+use IO::Select;
+use Socket qw(inet_pton AF_INET6);
+
+sub fail { print STDERR "sht-socks5: $_[0]\n"; exit 1 }
+
+my ($host, $port) = @ARGV;
+fail "usage: sht-socks5 <host> <port>" unless defined $port && $port =~ /^\d+$/ && $port > 0 && $port < 65536;
+
+my $url = $ENV{SHT_PROXY_URL} // fail "SHT_PROXY_URL is not set";
+my ($user, $pass, $proxy_host, $proxy_port) =
+    $url =~ m{^socks5h?://(?:([^:@/]*)(?::([^@/]*))?@)?(\[[^\]/]+\]|[^:@/\[\]]+):(\d+)/?$}
+    or fail "SHT_PROXY_URL is not a socks5:// URL";
+sub unescape { my $s = shift // ''; $s =~ s/%([0-9A-Fa-f]{2})/chr hex $1/ge; $s }
+($user, $pass) = (unescape($user), unescape($pass));
+$proxy_host =~ s/^\[(.*)\]$/$1/;
+
+my $proxy = IO::Socket::IP->new(PeerHost => $proxy_host, PeerPort => $proxy_port, Timeout => 20)
+    or fail "can't reach the proxy $proxy_host:$proxy_port: $@";
+binmode $proxy;
+
+sub send_all { defined syswrite($proxy, $_[0]) or fail "proxy: $!" }
+sub read_exactly {
+    my $want = shift;
+    my $data = '';
+    while (length $data < $want) {
+        my $got = sysread($proxy, my $chunk, $want - length $data);
+        fail "the proxy closed the connection" unless $got;
+        $data .= $chunk;
+    }
+    $data;
+}
+
+# Greeting: offer user/password if we have a user, otherwise no auth.
+my $with_auth = length $user > 0;
+send_all($with_auth ? "\x05\x01\x02" : "\x05\x01\x00");
+my ($version, $method) = unpack 'C2', read_exactly(2);
+fail "not a SOCKS5 proxy" unless $version == 5;
+if ($method == 2) {
+    fail "the proxy wants a user name and password, none set" unless $with_auth;
+    fail "user name or password longer than 255 bytes" if length $user > 255 || length $pass > 255;
+    send_all(pack('C C/a* C/a*', 1, $user, $pass));
+    my (undef, $status) = unpack 'C2', read_exactly(2);
+    fail "the proxy refused the user name or password" unless $status == 0;
+} elsif ($method != 0) {
+    fail "the proxy accepts none of our authentication methods";
+}
+
+# CONNECT: IP literals as addresses, names as names (resolved by the proxy).
+my $address;
+if ($host =~ /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/) {
+    $address = pack 'C C4', 1, $1, $2, $3, $4;
+} elsif ($host =~ /:/) {
+    (my $bare = $host) =~ s/^\[(.*)\]$/$1/;
+    my $packed = inet_pton(AF_INET6, $bare) or fail "bad IPv6 address $host";
+    $address = pack('C', 4) . $packed;
+} else {
+    fail "host name longer than 255 bytes" if length $host > 255;
+    $address = pack 'C C/a*', 3, $host;
+}
+send_all("\x05\x01\x00" . $address . pack('n', $port));
+my (undef, $reply, undef, $type) = unpack 'C4', read_exactly(4);
+my %errors = (1 => 'general failure', 2 => 'not allowed by its rules', 3 => 'network unreachable',
+    4 => 'host unreachable', 5 => 'connection refused', 6 => 'TTL expired',
+    7 => 'command not supported', 8 => 'address type not supported');
+fail "the proxy could not connect to $host:$port: " . ($errors{$reply} // "error $reply") unless $reply == 0;
+# Skip the bound address the proxy reports back.
+if ($type == 1) { read_exactly(4 + 2) }
+elsif ($type == 4) { read_exactly(16 + 2) }
+elsif ($type == 3) { read_exactly(unpack('C', read_exactly(1)) + 2) }
+else { fail "the proxy sent an unknown address type" }
+
+# Relay until the server side closes; when ssh closes its side, pass the
+# end of input on and keep reading what the server still sends.
+binmode STDIN;
+binmode STDOUT;
+my $select = IO::Select->new(\*STDIN, $proxy);
+while (my @ready = $select->can_read) {
+    for my $handle (@ready) {
+        my $got = sysread($handle, my $buffer, 65536);
+        if (!$got) {
+            exit 0 if $handle == $proxy;
+            $select->remove(\*STDIN);
+            shutdown($proxy, 1);
+            next;
+        }
+        my $out = $handle == $proxy ? \*STDOUT : $proxy;
+        my $offset = 0;
+        while ($offset < $got) {
+            my $written = syswrite($out, $buffer, $got - $offset, $offset);
+            exit 0 unless $written;
+            $offset += $written;
+        }
+    }
+}

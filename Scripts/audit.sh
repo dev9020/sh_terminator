@@ -85,8 +85,16 @@ grep -q "SecurityHardening.disableTextRewriting(in: textView)" Sources/SHTermina
 ok "editable fields never rewrite text"
 
 # SECURITY.md §8 — the shell gets the user's private TMPDIR, not /tmp.
-grep -q "environment: Self.shellEnvironment()" Sources/SHTerminator/PTY/PaneSession.swift || fail "shell started without shellEnvironment (TMPDIR)"
+grep -q "environment: Self.shellEnvironment() + ProxyStore.shared.paneEnvironment" Sources/SHTerminator/PTY/PaneSession.swift || fail "shell started without shellEnvironment (TMPDIR)"
 ok "shell environment includes TMPDIR"
+
+# SECURITY.md §18 — the panes' proxy: no other shell files, and the proxy URL
+# (with its password) leaves the pane shell's environment straight away.
+shell_files=$(ls -A Resources/shell | sort | tr '\n' ' ')
+[ "$shell_files" = ".zlogin .zprofile .zshenv .zshrc sht-socks5 " ] || fail "unexpected files in Resources/shell: $shell_files"
+grep -q "^unset SHT_SHELL_DIR SHT_APP SHT_PROXY_CONFIG" Resources/shell/.zshenv || fail "app variables left in the pane shell's environment"
+grep -q 'ENV{SHT_PROXY_URL}' Resources/shell/sht-socks5 || fail "sht-socks5 must take the proxy URL from the environment, not arguments"
+ok "panes' proxy files as documented"
 
 if [ -d dist/SHTerminator.app ]; then
     codesign --verify --strict dist/SHTerminator.app || fail "signature does not verify"

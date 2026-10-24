@@ -47,11 +47,12 @@ window as well — see §17.
   their contents into `~/Library/Saved Application State/`.
 - Each pane's scrollback lives only in the process's memory; the app keeps
   no session log on disk. The only things it writes to disk on its own are
-  the favorite commands, the notes (see §11 and §12) and the settings —
+  the favorite commands, the notes (see §11 and §12), the proxies for
+  panes with their passwords (§18) and the settings —
   switches and numbers in
   `~/Library/Preferences/dev.local.shterminator.plist`, with no pane
   contents, commands or notes.
-- Both data files (favorites, notes) are written through
+- The data files (favorites, notes, proxies) are written through
   `SecurityHardening.writePrivateFile`: a temporary file is created with
   mode `0600` from the start (`open(O_CREAT|O_EXCL, 0600)`), then `fsync`
   and an atomic `rename`. At no point does the file exist with
@@ -85,6 +86,10 @@ The Connection block in the sidebar reads only local state: interface
 addresses (`getifaddrs`) and the SystemConfiguration dynamic store
 (primary interface, service names, system proxies). It never looks up the
 public IP, because that would mean asking an outside server.
+The proxy for panes (§18) does not change this: the app only starts the
+panes' shell differently. The one piece of networking code in the bundle
+is `Resources/shell/sht-socks5`, a Perl helper that ssh (run by the user
+in a pane) starts as its `ProxyCommand`; the app never runs it.
 No auto-update, no analytics, no crash reporter — no such dependency has
 been added and none is planned.
 
@@ -145,7 +150,8 @@ app's own environment. On top of that the app passes only `TMPDIR`
 without it the shell and everything run in it would write temporary files
 (here-docs, editor buffers) to `/tmp`, which all accounts share. `PATH`
 and everything else is not passed on (the login shell sets them itself
-from its rc files). Nothing app-specific is added.
+from its rc files). Nothing else app-specific is added, except that zsh
+gets the startup files of the proxy for panes (§18).
 
 ### 9. Isolation between panes
 
@@ -407,6 +413,68 @@ printed with `cat`. Therefore (`Security/HostRequestFilter.swift`):
 
 `Scripts/audit.sh` checks that the filter is installed, OSC 52 is refused,
 and URLs are opened only through `LinkPolicy`.
+
+### 18. Proxy for panes
+
+**sh_terminator → Proxy for Panes…** keeps a list of SOCKS5 proxies, at
+most one of them in use, and which programs go through it: curl, git and
+brew by default, ssh (with scp and sftp) only when turned on.
+
+How it reaches them (`ProxyStore.paneEnvironment`). Every pane whose
+login shell is zsh gets `ZDOTDIR` pointing at `Contents/Resources/shell`
+inside the signed app, the path of the app's binary and the path of
+`proxies.json` — no proxy address or password. Those zsh startup files
+first run the user's own (`~/.zshenv`, `~/.zprofile`, `~/.zshrc`,
+`~/.zlogin`, at top level with `ZDOTDIR` set back), then define shell
+functions for curl, git, brew, ssh, scp and sftp, then hand `ZDOTDIR`
+back. Before each run a function `stat`s `proxies.json`; only when it
+changed does it run `SHTerminator --pane-proxy` to learn which programs
+go through which proxy. So adding, changing or turning off a proxy
+applies to open panes from their next command on. If the app can't be
+asked, the function refuses to run the program rather than run it
+without the proxy. Other login shells get nothing and start as in §8.
+
+- **The password.** It is saved with the proxy in `proxies.json` —
+  plain JSON, readable only by you (`0600`, written like the favorites,
+  §2), never in the settings plist. Not in the Keychain, on purpose: the
+  app's ad-hoc signature (§6) changes with every build, and macOS would
+  ask for Keychain access again each time. So anyone who can read your
+  files (a process running as you, a backup of your home folder) can read
+  the password; use a proxy password you don't use anywhere else. The
+  panes get it from the app's own binary in `--pane-proxy` mode, which
+  answers only a process that has the running app (the same executable)
+  among its ancestors, i.e. something started from one of its panes. In
+  the pane it lives in a plain shell parameter, not the environment, so
+  it is not inherited by everything the shell runs; only the wrapped
+  program gets it, in its own environment (`all_proxy` and friends for
+  curl/git/brew, `SHT_PROXY_URL` for the ssh helper). It is never put on a
+  command line, which other users could read with `ps`. This is a
+  convenience proxy password, not a vault.
+- **ssh through a proxy.** The SSH session is encrypted end to end and
+  the server's host key is checked as usual; the proxy sees only which
+  server you connect to, when, and how much traffic. The one dangerous
+  moment is the first connection to a server not yet in `known_hosts`:
+  a hostile proxy could put itself in the middle, and answering `yes`
+  without comparing the fingerprint lets it. This is why ssh is off by
+  default. The helper (`sht-socks5`) speaks SOCKS5 with user/password
+  (RFC 1928/1929) and sends the server's name to the proxy as is, so it is
+  looked up by the proxy, not this Mac's DNS. It uses only Perl core
+  modules and `/usr/bin/perl`.
+- **curl, git, brew.** HTTPS stays encrypted (the proxy sees host names);
+  plain HTTP passes through the proxy readable and changeable. With
+  **Look up server names through the proxy** (`socks5h`, on by default)
+  names are resolved by the proxy; with plain `socks5` this Mac's DNS
+  resolves them first, which tells your provider where you go.
+- **Limits.** zsh only (other login shells get no proxy, and the window
+  says so). Only commands typed in the pane's zsh are wrapped: scripts,
+  other shells, tmux and programs that call ssh/curl themselves bypass it
+  (git's own ssh is covered through `GIT_SSH_COMMAND`). The `-o
+  ProxyCommand` given to ssh wins over `ProxyJump`/`ProxyCommand` in
+  `~/.ssh/config`.
+
+`Scripts/audit.sh` checks that `Resources/shell` holds only these files,
+that `.zshenv` takes the app's variables out of the environment, and that
+the helper reads the URL from the environment, not its arguments.
 
 ## What this does not cover (accepted residual risks)
 

@@ -54,6 +54,8 @@ enum MainMenuBuilder {
         appMenu.addItem(item("Keep Notes Across Restarts", #selector(AppDelegate.togglePersistNotes(_:)), "", target: appDelegate))
         appMenu.addItem(item("Show Launcher at Startup", #selector(AppDelegate.toggleLauncher(_:)), "", target: appDelegate))
         appMenu.addItem(.separator())
+        appMenu.addItem(item("Proxy for Panes…", #selector(AppDelegate.showProxy(_:)), "", target: appDelegate))
+        appMenu.addItem(.separator())
         appMenu.addItem(item("Quit \(appName)", #selector(NSApplication.terminate(_:)), "q"))
 
         let menuItem = NSMenuItem()

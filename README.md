@@ -28,6 +28,7 @@ Panes like iTerm2 or tmux, plus protection a regular terminal doesn't give you: 
 - [Favorite commands](#favorite-commands)
 - [Notes](#notes)
 - [Connection](#connection)
+- [Proxy for panes](#proxy-for-panes)
 - [Security](#security)
 - [Project layout](#project-layout)
 - [Out of scope](#out-of-scope)
@@ -160,9 +161,23 @@ Under the notes, a **Connection** block shows how this Mac is connected right no
 
 - **LAN**: the address of the interface carrying traffic (Wi-Fi, Ethernet), listed first, then any other active ones.
 - **VPN**: `off`, or each tunnel that is up (utun/ipsec/ppp) with its address inside the tunnel. Idle system tunnels (iCloud Private Relay, Continuity) have only link-local addresses and don't count.
-- **PROXY**: `off`, or the system proxies enabled in System Settings (HTTP, HTTPS, SOCKS, PAC, auto-discovery).
+- **SYS PROXY**: `off`, or the system proxies enabled in System Settings (HTTP, HTTPS, SOCKS, PAC, auto-discovery).
 
-It updates by itself as soon as macOS reports a change (a VPN coming up, a Wi-Fi switch, a new proxy), and every 15 seconds besides. These are local addresses only: the app makes no network requests (SECURITY.md §4), so it doesn't know the public IP your provider or VPN gives you. Programs in the panes take proxies from `http_proxy`/`all_proxy`, not from these system settings.
+It updates by itself as soon as macOS reports a change (a VPN coming up, a Wi-Fi switch, a new proxy), and every 15 seconds besides. These are local addresses only: the app makes no network requests (SECURITY.md §4), so it doesn't know the public IP your provider or VPN gives you. Programs in the panes take proxies from `http_proxy`/`all_proxy`, not from these system settings. **PANE PROXY** shows the app's own proxy for the panes (below).
+
+## Proxy for panes
+
+**sh_terminator → Proxy for Panes…** (or the network icon next to refresh in the Connection block) keeps a list of SOCKS5 proxies: add (paste `socks5://user:password@host:port` and the fields fill in), edit, delete, and tick **Use** on the one the panes should go through (one at a time; untick it to turn the proxy off). Below the list, choose what goes through it:
+
+| Program | Default | How |
+|---|---|---|
+| curl | on | `all_proxy` / `https_proxy` in its environment |
+| git | on | the same for https remotes, `GIT_SSH_COMMAND` for ssh remotes |
+| brew | on | the same variables (Homebrew passes them on to its curl and git) |
+| ssh, scp, sftp | off | `-o ProxyCommand=` a small SOCKS5 helper that also handles the password |
+
+It needs zsh as the login shell and applies right away, to open panes too, from their next command on. Passwords are saved in `~/Library/Application Support/SHTerminator/proxies.json` (`0600`, readable only by you), not the Keychain, so macOS never asks for Keychain access. The app itself still makes no connections: the pane's zsh wraps those programs in shell functions, which ask the app for the proxy whenever its settings change. Details, limits, and why ssh is off by default: SECURITY.md §18.
+
 
 ## Security
 
@@ -198,12 +213,14 @@ Sources/SHTerminator/
   Favorites/                       store, menu, manager window, sidebar, placeholders
   Notes/                           notes box and its store
   Connection/                      LAN / VPN / proxy block under the notes (local state only)
+  Proxy/                           proxies for panes: store, settings panel, --pane-proxy query
   Settings/AppSettings.swift       the few settings (UserDefaults)
   Security/SecurityHardening.swift process, window, Secure Input, clipboard, 0600 files
   Security/PrivacyLock.swift       window lock
   Security/PastePolicy.swift       paste check rules
   Security/HostRequestFilter.swift what a program in a pane may ask the terminal for
   Security/HostOutputFilter.swift  neutralises screen-read and local-file requests in output
+Resources/shell/                   zsh startup files + ssh SOCKS5 helper for the panes' proxy
 Tests/SHTerminatorTests/           swift test (Swift Testing)
 Scripts/audit.sh                   mechanical check of SECURITY.md claims
 Scripts/make-icon.swift            the app icon, drawn in code (./Scripts/make-icon.sh)

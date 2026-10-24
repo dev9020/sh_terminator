@@ -27,6 +27,8 @@ mkdir -p "${APP_BUNDLE}/Contents/MacOS" "${APP_BUNDLE}/Contents/Resources"
 cp "${BUILD_DIR}/${APP_NAME}" "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}"
 cp "Resources/Info.plist" "${APP_BUNDLE}/Contents/Info.plist"
 cp "Resources/AppIcon.icns" "${APP_BUNDLE}/Contents/Resources/AppIcon.icns"
+# zsh startup files and the ssh helper for the panes' proxy (SECURITY.md §18).
+cp -R "Resources/shell" "${APP_BUNDLE}/Contents/Resources/shell"
 
 if [ "${SIGN_IDENTITY}" = "-" ]; then
     echo "==> codesign (ad-hoc, hardened runtime)"
