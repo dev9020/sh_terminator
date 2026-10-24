@@ -30,8 +30,9 @@ final class NotesPanel: NSObject, NSTextViewDelegate {
 
     @objc private func copyAll(_ sender: Any?) {
         // Notes often hold secrets: keep them out of clipboard managers'
-        // history and off other devices (Universal Clipboard).
-        SecurityHardening.copySecret(textView.string)
+        // history and off other devices (Universal Clipboard), and don't
+        // leave them on the clipboard for any app to read later.
+        SecurityHardening.copySecret(textView.string, clearAfter: 20)
     }
 
     @objc private func clearAll(_ sender: Any?) {

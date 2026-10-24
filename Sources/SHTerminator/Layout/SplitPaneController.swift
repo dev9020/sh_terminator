@@ -172,18 +172,17 @@ final class SplitPaneController: NSObject {
     ///   break can act as Return is decided by the program in *that* pane,
     ///   not the one the user pasted into — "Paste As Is" included; only
     ///   "Paste and Run Lines" runs them everywhere.
-    /// - Keys typed or text pasted while the source pane doesn't echo (a
-    ///   password prompt) only reach panes that don't echo either — a
-    ///   `sudo` password typed or pasted once for every pane still works,
-    ///   but it never shows up in clear at another pane's shell prompt (and
-    ///   in its history).
+    /// - Keys typed or text pasted at a password prompt only reach panes at
+    ///   a password prompt too — a `sudo` password typed or pasted once for
+    ///   every pane still works, but it never shows up in clear at another
+    ///   pane's shell prompt (and in its history).
     private func relay(_ input: UserInput, from source: PaneSession) {
         guard isBroadcasting, !isRelayingBroadcast else { return }
         isRelayingBroadcast = true
         defer { isRelayingBroadcast = false }
-        let sourceHidesInput = source.isEchoOff
+        let sourceHidesInput = source.isReadingHiddenLine
         for session in root.leaves() where session !== source {
-            if sourceHidesInput && !session.isEchoOff { continue }
+            if sourceHidesInput && !session.isReadingHiddenLine { continue }
             switch input {
             case .bytes(let data):
                 session.terminalView.send(data: data)

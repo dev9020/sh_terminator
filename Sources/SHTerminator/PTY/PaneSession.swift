@@ -128,16 +128,13 @@ final class PaneSession: NSObject, LocalProcessTerminalViewDelegate {
         foregroundProgramName ?? Self.processName(terminalView.process.shellPid) ?? "shell"
     }
 
-    /// Whether the pane's terminal doesn't echo what is typed right now —
-    /// normally a password prompt (`sudo`, `ssh`, `gpg`…), but also any
-    /// full-screen program (vim, less…). A pane running `ssh` always looks
-    /// like this: ssh turns local echo off and lets the remote side echo.
-    var isEchoOff: Bool {
-        let process = terminalView.process!
-        guard process.running, process.childfd >= 0 else { return false }
-        var attributes = termios()
-        guard tcgetattr(process.childfd, &attributes) == 0 else { return false }
-        return attributes.c_lflag & tcflag_t(ECHO) == 0
+    /// Whether the pane reads a line without showing it right now — a
+    /// `sudo`/`ssh`/`gpg` password prompt (see `TerminalPaneView.InputMode`).
+    /// Not the shell's own prompt, although its line editor turns the
+    /// terminal's echo off too (and echoes keys itself), and not a remote
+    /// password prompt behind `ssh`, which keeps the local terminal raw.
+    var isReadingHiddenLine: Bool {
+        terminalView.inputMode == .hiddenLine
     }
 
     nonisolated static func processName(_ pid: pid_t) -> String? {

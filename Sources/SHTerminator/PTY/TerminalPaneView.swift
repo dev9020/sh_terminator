@@ -125,11 +125,48 @@ final class TerminalPaneView: LocalProcessTerminalView {
     /// — or any output, such as a `cat`-ed file or a remote host's login
     /// banner — can switch on; a program that does without honouring it
     /// (`sh`, macOS's bash 3.2, many REPLs) would run every pasted line.
+    /// "At its prompt" is the line editor's terminal mode, not just the
+    /// shell being in the foreground: while the shell itself runs `read`,
+    /// `vared` or `select`, the first line goes to that builtin and the
+    /// rest is then read by the line editor as typed keys — and run.
     var pasteIsBracketedByShell: Bool {
-        guard getTerminal().bracketedPasteMode, let process, process.running, process.childfd >= 0 else { return false }
-        let group = tcgetpgrp(process.childfd)
-        guard group > 0, group == process.shellPid, let name = PaneSession.processName(group) else { return false }
+        guard getTerminal().bracketedPasteMode, inputMode == .shellLineEditor, let name = PaneSession.processName(process.shellPid) else { return false }
         return Self.bracketedPasteShells.contains(name)
+    }
+
+    // MARK: - Input mode
+
+    /// What the pane's terminal does with input right now, as far as
+    /// pasting and broadcast care.
+    enum InputMode: Equatable {
+        /// The pane's own shell at its prompt: its line editor (ZLE,
+        /// readline, fish) turns the terminal's echo *off* and echoes
+        /// keys itself, so whatever is typed shows up — and Return runs it.
+        case shellLineEditor
+        /// A line read without echo — a `sudo`/`ssh`/`gpg` password prompt
+        /// (`readpassphrase`, `getpass`, `read -s`): canonical mode, echo off.
+        case hiddenLine
+        /// Anything else: an echoing program, a full-screen one (vim, less),
+        /// `ssh` with the remote side echoing, no process at all.
+        case other
+    }
+
+    /// A password prompt keeps the terminal canonical with echo off; a
+    /// line editor and full-screen programs take it out of canonical mode.
+    nonisolated static func inputMode(localFlags: tcflag_t, foregroundIsShell: Bool) -> InputMode {
+        let echo = localFlags & tcflag_t(ECHO) != 0
+        let canonical = localFlags & tcflag_t(ICANON) != 0
+        if !echo && canonical { return .hiddenLine }
+        if !echo && !canonical && foregroundIsShell { return .shellLineEditor }
+        return .other
+    }
+
+    var inputMode: InputMode {
+        guard let process, process.running, process.childfd >= 0 else { return .other }
+        var attributes = termios()
+        guard tcgetattr(process.childfd, &attributes) == 0 else { return .other }
+        let group = tcgetpgrp(process.childfd)
+        return Self.inputMode(localFlags: attributes.c_lflag, foregroundIsShell: group > 0 && group == process.shellPid)
     }
 
     // MARK: - Guarded paste

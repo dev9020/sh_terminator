@@ -176,7 +176,11 @@ Besides the timer, such a copy (and the "copy all" button in the notes):
 - is put on the clipboard with `NSPasteboard.ContentsOptions.currentHostOnly`
   — it is not passed through Universal Clipboard to an iPhone/iPad/other Mac.
 
-The 20-second clear only happens if the clipboard has not changed since
+The notes' "copy all" button clears the clipboard after 20 seconds as
+well. Locking (§14) and quitting the app clear such a copy at once,
+without waiting for the timer (which would not outlive the app anyway).
+
+The clear only happens if the clipboard has not changed since
 (`changeCount`): if you copied something else in the meantime, in any
 app, it stays.
 
@@ -288,7 +292,11 @@ Text is checked before it is pasted (`Security/PastePolicy.swift`):
 - **Line breaks** — each of them may act as Return. A multi-line paste
   goes through without a question only into the pane's own shell prompt,
   zsh or fish, with bracketed paste on — they switch that mode on
-  themselves at every prompt and do not run pasted lines. In every other
+  themselves at every prompt and do not run pasted lines. "At the prompt"
+  means the shell's line editor has the terminal (non-canonical, no
+  echo), not merely that the shell is in the foreground: while the shell
+  itself runs `read`, `vared` or `select`, the first line would go to that
+  builtin and the rest would be read by the line editor as typed keys. In every other
   case there is a question with the options "paste as one line" (default),
   "paste and run lines" (or "paste as is" if the program turned bracketed
   paste on) and "cancel". A mode turned on by any other program (`ssh`, a
@@ -314,15 +322,17 @@ every pane's header is red.
   "Paste As Is" keeps line breaks only in the source pane (its program
   promised not to run them); in the other panes the paste is handled
   according to their program, as usual.
-- **Typing and pasting with echo off.** If the source pane's terminal does
-  not echo input (a `sudo`/`ssh`/`gpg` password prompt, and also
-  full-screen programs such as vim), keystrokes and pasted text go only to
-  panes where echo is off too. So a `sudo` password typed once for all
-  panes still works, but is never printed in plain text at a neighbouring
-  pane's shell prompt (or stored in its history).
-  Limitation: in a pane running `ssh`, local echo is always off (the remote
-  side does the echoing), so between ssh panes this rule cannot tell a
-  password prompt from ordinary input.
+- **Typing and pasting at a password prompt.** If the source pane is at a
+  local password prompt (`sudo`/`ssh`/`gpg`: the terminal is canonical
+  with echo off), keystrokes and pasted text go only to panes at such a
+  prompt too. So a `sudo` password typed once for all panes still works,
+  but is never printed in plain text at a neighbouring pane's shell prompt
+  (or stored in its history). Echo being off alone is not the test: the
+  shells' own line editors (zsh, bash, fish) turn the terminal's echo off
+  at every prompt and echo keys themselves.
+  Limitation: a pane running `ssh` keeps its local terminal raw (the
+  remote side does the echoing), so a password prompt on the remote host
+  looks like ordinary input there and is broadcast like it.
 
 ### 17. What a program in a pane may ask of the terminal
 

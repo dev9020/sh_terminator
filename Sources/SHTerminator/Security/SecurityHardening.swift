@@ -62,24 +62,45 @@ enum SecurityHardening {
     private static let concealedType = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
     private static let transientType = NSPasteboard.PasteboardType("org.nspasteboard.TransientType")
 
+    /// The clipboard and its `changeCount` right after the last
+    /// `copySecret`, while that secret may still be on it.
+    private static var lastSecret: (pasteboard: NSPasteboard, changeCount: Int)?
+
     /// Puts `string` on the clipboard marked as a secret: clipboard managers
     /// skip it, and it stays on this Mac (no Universal Clipboard hand-off to
     /// other devices). With `clearAfter`, the clipboard is emptied after that
     /// many seconds — unless something else was copied in the meantime (in
-    /// any app), which is then left alone.
-    static func copySecret(_ string: String, clearAfter seconds: TimeInterval? = nil) {
+    /// any app), which is then left alone. Locking and quitting empty it
+    /// sooner (`clearSecretFromClipboard`): a timer doesn't outlive the app.
+    static func copySecret(_ string: String, clearAfter seconds: TimeInterval? = nil, pasteboard: NSPasteboard = .general) {
         guard !string.isEmpty else { return }
-        let pasteboard = NSPasteboard.general
         pasteboard.prepareForNewContents(with: .currentHostOnly)
         pasteboard.setString(string, forType: .string)
         pasteboard.setString("", forType: concealedType)
         pasteboard.setString("", forType: transientType)
+        let ownChange = pasteboard.changeCount
+        lastSecret = (pasteboard, ownChange)
 
         guard let seconds else { return }
-        let ownChange = pasteboard.changeCount
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
-            guard pasteboard.changeCount == ownChange else { return }
+            MainActor.assumeIsolated { clear(pasteboard, ifStill: ownChange) }
+        }
+    }
+
+    /// Empties the clipboard if it still holds the secret `copySecret` put
+    /// there last — nothing else copied since, in any app. For locking and
+    /// quitting.
+    static func clearSecretFromClipboard() {
+        guard let lastSecret else { return }
+        clear(lastSecret.pasteboard, ifStill: lastSecret.changeCount)
+    }
+
+    private static func clear(_ pasteboard: NSPasteboard, ifStill changeCount: Int) {
+        if pasteboard.changeCount == changeCount {
             pasteboard.clearContents()
+        }
+        if lastSecret?.pasteboard === pasteboard && lastSecret?.changeCount == changeCount {
+            lastSecret = nil
         }
     }
 

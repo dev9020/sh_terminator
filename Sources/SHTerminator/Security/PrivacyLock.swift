@@ -64,6 +64,9 @@ final class PrivacyLock {
     }
 
     func lock() {
+        // A secret just copied from here must not be pasteable into
+        // another app by whoever is at the Mac while it is locked.
+        SecurityHardening.clearSecretFromClipboard()
         set(.locked)
     }
 
