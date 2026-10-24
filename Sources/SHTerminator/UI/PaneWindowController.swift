@@ -17,7 +17,7 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// The focused pane's header text, for `updateWindowTitle`.
     private var focusedPaneTitle = ""
 
-    private static let sidebarWidth: CGFloat = 130
+    private static let sidebarWidth: CGFloat = 260
     private static let baseTitle = "sh_terminator"
 
     init(root: PaneNode) {

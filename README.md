@@ -27,6 +27,7 @@ Panes like iTerm2 or tmux, plus protection a regular terminal doesn't give you: 
 - [Broadcast input](#broadcast-input)
 - [Favorite commands](#favorite-commands)
 - [Notes](#notes)
+- [Connection](#connection)
 - [Security](#security)
 - [Project layout](#project-layout)
 - [Out of scope](#out-of-scope)
@@ -153,6 +154,16 @@ Below the favorites in the sidebar is a **Notes** box: a plain text field for pa
 - Drag the divider between favorites and notes to change its height.
 - The text is shared by all windows and kept across restarts in `~/Library/Application Support/SHTerminator/notes.txt` (`0600`, deleted when you clear it). To keep notes in memory only, turn off **Keep Notes Across Restarts** (SECURITY.md §12).
 
+## Connection
+
+Under the notes, a **Connection** block shows how this Mac is connected right now:
+
+- **LAN**: the address of the interface carrying traffic (Wi-Fi, Ethernet), listed first, then any other active ones.
+- **VPN**: `off`, or each tunnel that is up (utun/ipsec/ppp) with its address inside the tunnel. Idle system tunnels (iCloud Private Relay, Continuity) have only link-local addresses and don't count.
+- **PROXY**: `off`, or the system proxies enabled in System Settings (HTTP, HTTPS, SOCKS, PAC, auto-discovery).
+
+It updates by itself as soon as macOS reports a change (a VPN coming up, a Wi-Fi switch, a new proxy), and every 15 seconds besides. These are local addresses only: the app makes no network requests (SECURITY.md §4), so it doesn't know the public IP your provider or VPN gives you. Programs in the panes take proxies from `http_proxy`/`all_proxy`, not from these system settings.
+
 ## Security
 
 
@@ -186,6 +197,7 @@ Sources/SHTerminator/
   UI/                              window, menus, equal-split NSSplitView, launcher, theme
   Favorites/                       store, menu, manager window, sidebar, placeholders
   Notes/                           notes box and its store
+  Connection/                      LAN / VPN / proxy block under the notes (local state only)
   Settings/AppSettings.swift       the few settings (UserDefaults)
   Security/SecurityHardening.swift process, window, Secure Input, clipboard, 0600 files
   Security/PrivacyLock.swift       window lock

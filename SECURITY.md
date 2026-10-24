@@ -81,6 +81,10 @@ grep -rn "URLSession\|Network\.framework\|CFNetwork" Sources/SHTerminator   # em
 ```
 (this and the other checks in this document are run by `Scripts/audit.sh`;
 `build-app.sh` runs it after every build).
+The Connection block in the sidebar reads only local state: interface
+addresses (`getifaddrs`) and the SystemConfiguration dynamic store
+(primary interface, service names, system proxies). It never looks up the
+public IP, because that would mean asking an outside server.
 No auto-update, no analytics, no crash reporter — no such dependency has
 been added and none is planned.
 

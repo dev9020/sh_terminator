@@ -6,7 +6,8 @@ import AppKit
 ///
 /// The table refuses first responder, so clicking a row never takes keyboard
 /// focus away from the terminal. Under the list, behind a draggable
-/// divider, sits the shared `NotesPanel`.
+/// divider, sits the shared `NotesPanel`, and under that the
+/// `ConnectionPanel`.
 @MainActor
 final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate {
     let view = NSView()
@@ -23,6 +24,7 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
     }
     private var rows: [Row] = []
     private let notes = NotesPanel()
+    private let connection = ConnectionPanel()
     private let emptyLabel = NSTextField(wrappingLabelWithString: "No favorites yet.\nAdd one with ⌘⇧F, or select a command in the terminal and press ⌘⇧S.")
 
     override init() {
@@ -128,10 +130,17 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
         split.setHoldingPriority(NSLayoutConstraint.Priority(250), forSubviewAt: 0)
         split.setHoldingPriority(NSLayoutConstraint.Priority(260), forSubviewAt: 1)
 
-        for subview in [background, split] {
+        for subview in [background, split, connection.view] {
             subview.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(subview)
         }
+        // Squeeze the connection block to its content. This outranks the
+        // split's holding priorities, the divider drag (~490) and window
+        // resizing (500-510), so neither stretches it and the split takes the
+        // spare height; it stays below the labels' compression resistance
+        // (750), so the text never gets clipped.
+        let connectionFit = connection.view.heightAnchor.constraint(equalToConstant: 0)
+        connectionFit.priority = NSLayoutConstraint.Priority(740)
         NSLayoutConstraint.activate([
             view.widthAnchor.constraint(greaterThanOrEqualToConstant: 100),
             background.topAnchor.constraint(equalTo: view.topAnchor),
@@ -139,7 +148,11 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
             background.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             background.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             split.topAnchor.constraint(equalTo: view.topAnchor),
-            split.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            split.bottomAnchor.constraint(equalTo: connection.view.topAnchor),
+            connection.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            connectionFit,
+            connection.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            connection.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             split.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             split.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             favoritesPane.heightAnchor.constraint(greaterThanOrEqualToConstant: 80),
