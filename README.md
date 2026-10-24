@@ -1,164 +1,179 @@
+<div align="center">
+
 # sh_terminator
 
-Нативный терминал для macOS с разделением окна на панели (как в iTerm2/tmux),
-спроектированный так, чтобы в нём безопасно держать на экране пароли, ключи
-и seed-фразы. Полный разбор того, что и как защищено — в [SECURITY.md](SECURITY.md).
+**A native macOS split-pane terminal built to keep passwords, keys and seed phrases safe on screen.**
 
-## Сборка и запуск
+Panes like iTerm2 or tmux, plus protection a regular terminal doesn't give you: windows hidden from screenshots and screen sharing, a Touch ID lock, paste checks and a clean clipboard.
 
-Нужны только Xcode Command Line Tools (полноценный Xcode.app не требуется).
+![macOS 13+](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)
+![Swift](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)
+![Dependencies](https://img.shields.io/badge/dependencies-1%20(SwiftTerm%2C%20pinned)-blue)
+![Network](https://img.shields.io/badge/network-none-success)
+
+<img src="docs/screenshots/panes.png" alt="Three panes: a file listing, top and ping, with the favorites sidebar and notes on the right" width="900">
+
+</div>
+
+---
+
+## Contents
+
+- [Highlights](#highlights)
+- [Install & run](#install--run)
+- [Keyboard shortcuts](#keyboard-shortcuts)
+- [Panes](#panes)
+- [Broadcast input](#broadcast-input)
+- [Favorite commands](#favorite-commands)
+- [Notes](#notes)
+- [Security](#security)
+- [Project layout](#project-layout)
+- [Out of scope](#out-of-scope)
+
+## Highlights
+
+| | |
+|---|---|
+| 🪟 **Split panes** | ⌘D / ⌘⇧D, nested as deep as you like. Drag dividers freely, zoom one pane, move between panes with arrow keys. Windows can start from 2/4/6/8/10-pane templates. |
+| 🙈 **Hidden from capture** | Windows are excluded from screenshots, screen recording and screen sharing (Zoom, Meet, Slack, QuickTime). |
+| 🔒 **Lock** | ⌃⌘L, an idle timer, or Mac sleep/screen lock hides every window. Touch ID or your password unlocks it. |
+| 📋 **Safe paste** | ⌘V checks multi-line and suspicious pastes before they can run. Copy & Clear wipes the clipboard after 20 seconds. |
+| 📡 **Broadcast** | Type into every pane of a window at once. Password prompts are never echoed into another pane's shell. |
+| ⭐ **Favorites** | Saved commands grouped into categories, with `{{placeholders}}`, inserted with ⌘1…⌘9 or from the sidebar, but never run for you. |
+| 📝 **Notes** | A scratch pad next to the favorites. Copied text is marked as a secret so clipboard managers skip it. |
+| 🧱 **Small surface** | No networking, one pinned dependency, Hardened Runtime, no core dumps, files saved with mode `0600`. |
+
+## Install & run
+
+You only need the Xcode Command Line Tools; the full Xcode.app isn't required.
 
 ```sh
-./Scripts/build-app.sh      # swift build -c release + упаковка в .app + codesign
+./Scripts/build-app.sh      # swift build -c release, package as .app, codesign
 open dist/SHTerminator.app
 ```
 
-Для разработки без пересборки `.app`:
+For development without rebuilding the `.app`:
+
 ```sh
 swift run
 ```
 
-Тесты и проверка утверждений из SECURITY.md (`build-app.sh` запускает
-аудит сам после сборки):
+Run the tests and check the claims in [SECURITY.md](SECURITY.md) (`build-app.sh` runs the audit itself after building):
+
 ```sh
 swift test
 ./Scripts/audit.sh
 ```
 
-## Горячие клавиши
+> [!NOTE]
+> By default the app is signed ad-hoc, which only suits your own Mac. To sign with a real identity, set `SIGN_IDENTITY`; see the comments in `Scripts/build-app.sh` and SECURITY.md §6.
 
-| Действие                         | Клавиши   |
-|-----------------------------------|-----------|
-| Новое окно                       | ⌘N        |
-| Новое окно из шаблона            | File → New Window From Template → 2/4/6/8/10 панелей |
-| Разделить вертикально (слева/справа) | ⌘D    |
-| Разделить горизонтально (сверху/снизу) | ⌘⇧D |
-| Закрыть панель                   | ⌘W        |
-| Закрыть всё окно                 | ⌘⇧W       |
-| Следующая / предыдущая панель    | ⌘] / ⌘[   |
-| Панель слева / справа / выше / ниже | ⌥⌘← / ⌥⌘→ / ⌥⌘↑ / ⌥⌘↓ |
-| Развернуть панель на всё окно    | ⌘↩ (toggle) |
-| Ввод сразу во все панели окна (broadcast) | ⌥⌘I (toggle) |
-| Поиск / следующее / предыдущее   | ⌘F / ⌘G / ⌘⇧G |
-| Очистить scrollback              | ⌘K        |
-| Крупнее / мельче / обычный шрифт | ⌘+ / ⌘− / ⌘0 |
-| Заблокировать окна               | ⌃⌘L       |
-| Copy & Clear Clipboard после 20с | ⌥⌘C       |
-| Вставить избранную команду 1…9   | ⌘1 … ⌘9   |
-| Добавить выделенное в избранное  | ⌘⇧S       |
-| Управление избранным             | ⌘⇧F       |
-| Показать/скрыть боковую панель избранного | ⌘⇧B |
+## Keyboard shortcuts
 
-Клик по панели тоже переключает на неё фокус.
+<table>
+<tr><th>Windows & panes</th><th></th><th>Text & tools</th><th></th></tr>
+<tr><td>New window</td><td><kbd>⌘N</kbd></td><td>Find / next / previous</td><td><kbd>⌘F</kbd> <kbd>⌘G</kbd> <kbd>⌘⇧G</kbd></td></tr>
+<tr><td>Split left | right</td><td><kbd>⌘D</kbd></td><td>Clear scrollback</td><td><kbd>⌘K</kbd></td></tr>
+<tr><td>Split top / bottom</td><td><kbd>⌘⇧D</kbd></td><td>Bigger / smaller / default font</td><td><kbd>⌘+</kbd> <kbd>⌘−</kbd> <kbd>⌘0</kbd></td></tr>
+<tr><td>Close pane</td><td><kbd>⌘W</kbd></td><td>Copy & clear clipboard after 20 s</td><td><kbd>⌥⌘C</kbd></td></tr>
+<tr><td>Close window</td><td><kbd>⌘⇧W</kbd></td><td>Lock all windows</td><td><kbd>⌃⌘L</kbd></td></tr>
+<tr><td>Next / previous pane</td><td><kbd>⌘]</kbd> <kbd>⌘[</kbd></td><td>Insert favorite 1…9</td><td><kbd>⌘1</kbd> … <kbd>⌘9</kbd></td></tr>
+<tr><td>Pane left / right / up / down</td><td><kbd>⌥⌘←</kbd> <kbd>⌥⌘→</kbd> <kbd>⌥⌘↑</kbd> <kbd>⌥⌘↓</kbd></td><td>Add selection to favorites</td><td><kbd>⌘⇧S</kbd></td></tr>
+<tr><td>Zoom pane (toggle)</td><td><kbd>⌘↩</kbd></td><td>Manage favorites</td><td><kbd>⌘⇧F</kbd></td></tr>
+<tr><td>Broadcast input (toggle)</td><td><kbd>⌥⌘I</kbd></td><td>Show / hide sidebar</td><td><kbd>⌘⇧B</kbd></td></tr>
+</table>
 
-## Панели
+Templates are under **File → New Window From Template** (2, 4, 6, 8 or 10 panes). Clicking a pane also focuses it.
 
-- Над каждой панелью — строка заголовка: заголовок, который выставила
-  программа, или «программа — каталог» (например `ssh — ~/work`). В
-  заголовок окна он попадает, только если включить **Show Pane Title in
-  Window Title** (по умолчанию выключено, см. SECURITY.md, п. 17).
-- Новая панель (⌘D / ⌘⇧D) открывается в текущем каталоге той, которую
-  делите.
-- **Broadcast** (⌥⌘I): всё, что набирается или вставляется в одну панель,
-  уходит во все панели этого окна. Пока режим включён, заголовки панелей
-  красные с пометкой BROADCAST. Вставка в каждой панели проверяется по её
-  собственной программе, а пароль — набранный или вставленный — с запроса
-  без эха уходит только туда, где тоже запрос без эха (SECURITY.md, п. 16).
-- **Закрытие с подтверждением**: если в панели работает что-то кроме самого
-  шелла (`ssh`, `vim`, `top`…), ⌘W, ⌘⇧W и ⌘Q сначала спросят.
-- **Вставка ⌘V с проверкой**: см. SECURITY.md, п. 15.
+## Panes
 
-## Настройки безопасности
+- Each pane has a slim header showing the title the program set, or **program — directory** (for example `ssh — ~/work`). The header text only goes into the window title if you turn on **Show Pane Title in Window Title**, which is off by default (SECURITY.md §17).
+- A new pane (⌘D / ⌘⇧D) opens in the current directory of the pane you split.
+- **Close confirmation:** if something other than the shell is running in a pane (`ssh`, `vim`, `top`…), ⌘W, ⌘⇧W and ⌘Q ask first.
+- **Checked paste (⌘V):** see SECURITY.md §15.
 
-В меню приложения (sh_terminator):
-- **Secure Keyboard Entry** — включено по умолчанию (SECURITY.md, п. 13).
-- **Lock Now** (⌃⌘L) и **Auto-Lock** — блокировка всех окон, вручную или
-  после N минут без ввода; снимается Touch ID или паролем (п. 14).
-- **Lock When Mac Sleeps or Screen Locks** — включено по умолчанию:
-  блокировать окна при сне, блокировке экрана и смене пользователя.
-- **Hide Windows When in Background** — закрывать окна шторкой, пока
-  активно другое приложение.
-- **Show Pane Title in Window Title** — выключено по умолчанию: заголовок
-  окна виден вне окна (Dock, Mission Control, Accessibility).
-- **Keep Notes Across Restarts** — если выключить, заметки живут только в
-  памяти, а файл удаляется (п. 12).
+## Broadcast input
 
-## Избранные команды
+<img src="docs/screenshots/broadcast.png" alt="Four panes with red BROADCAST headers, all showing the same command" width="900">
 
-Меню **Favorites** хранит часто используемые команды (например, подключение
-к удалённой БД). Выбор пункта меню или ⌘1…⌘9 **вставляет** команду в
-активную панель, но не запускает её — Return нажимаете сами, так что
-команду можно поправить перед запуском.
+Turn it on with <kbd>⌥⌘I</kbd>, and whatever you type or paste into one pane goes to every pane in that window. While it's on, the pane headers turn red and say **BROADCAST**.
 
-- **Боковая панель справа** в каждом окне — прокручиваемый список всего
-  избранного. Клик по команде вставляет её в активную панель этого окна
-  (ту, что с подсвеченной рамкой). Панель одна на окно, сколько бы его ни
-  делили. Скрыть/показать — ⌘⇧B, карандаш в заголовке открывает управление.
-- **Favorites → Manage Favorites…** (⌘⇧F) — список: «+» / «−», правка
-  имени и команды прямо в таблице (двойной клик), порядок — перетаскиванием
-  (первые девять получают ⌘1…⌘9), «Insert into Terminal» (⌘↩) вставляет
-  выбранную команду в окно терминала.
-- **Favorites → Add Selection to Favorites** (⌘⇧S) — выделите команду в
-  терминале, и она добавится новой записью.
-- **Подстановки**: `{{имя}}` или `{{имя:значение по умолчанию}}` в команде,
-  например `psql -h {{host:db.internal}} -U {{user}}`. При вставке
-  появится форма с полями, и в терминал уйдёт уже заполненная команда.
-- Поле **Filter** над списком (появляется, когда записей две и больше)
-  ищет по имени и по тексту команды.
+- Each pane checks a paste against **its own** program, not the program in the pane you pasted into.
+- A password you type or paste at a no-echo prompt only goes to panes that are also at a no-echo prompt. One `sudo` password can unlock every pane, but it never appears in plain text at another pane's shell prompt or in its history (SECURITY.md §16).
 
-Хранится в `~/Library/Application Support/SHTerminator/favorites.json`
-(права `0600`). Пароли в команду лучше не вписывать — см. SECURITY.md, п. 11.
+## Favorite commands
 
-## Заметки
+<img src="docs/screenshots/favorites.png" alt="The placeholder form asking for host, user and database before inserting a psql command" width="900">
 
-Под избранным в боковой панели — блок **Notes**: обычное текстовое поле,
-куда можно вставить что угодно, потом скопировать и удалить. Кнопки в
-заголовке: скопировать всё и очистить (очистку можно отменить ⌘Z).
-Копирование помечает текст как секрет: менеджеры буфера обмена его не
-запоминают, и он не уходит на другие устройства. Высоту
-блока меняет разделитель между избранным и заметками. Текст общий для
-всех окон и сохраняется между перезапусками в
-`~/Library/Application Support/SHTerminator/notes.txt` (права `0600`;
-после очистки файл удаляется). Подробнее — SECURITY.md, п. 12.
+The **Favorites** menu holds commands you use often, like connecting to a remote database. Choosing one, or pressing <kbd>⌘1</kbd>…<kbd>⌘9</kbd>, **inserts** it into the active pane but doesn't run it. You press Return yourself, so you can edit it first.
 
-## Иконка
+- **Categories:** group favorites as you like (*Servers*, *Databases*, *Kubernetes*…). Everything starts in **Uncategorized**, a built-in group you can rename but not delete. In the manager you can add a category with **+**, rename it by double-clicking, reorder categories by dragging, and move a favorite with its **Category** popup or by dragging it onto a category. Deleting a category keeps its favorites by moving them to the built-in group. Once there's at least one category, the sidebar and the Favorites menu show a heading for each, and <kbd>⌘1</kbd>…<kbd>⌘9</kbd> follow that order.
+- **Sidebar:** each window has one scrollable list on the right, however many panes it has. Click a command to insert it into the focused pane (the one with the highlighted border). <kbd>⌘⇧B</kbd> shows or hides it; the pencil icon opens the manager.
+- **Manage Favorites… (<kbd>⌘⇧F</kbd>):** categories on the left, the selected category's favorites on the right. Add or remove entries, double-click to edit, drag to reorder. **Insert into Terminal** (<kbd>⌘↩</kbd>) inserts the selected command.
+- **Add Selection to Favorites (<kbd>⌘⇧S</kbd>):** select a command in the terminal to save it as a new entry.
+- **Placeholders:** write `{{name}}` or `{{name:default}}` in a command, for example
+  ```
+  psql -h {{host:db.internal}} -U {{user}}
+  ```
+  When you insert it, a form asks for each value, and the filled-in command goes to the terminal.
+- **Filter:** the search field above the list (shown once there are two or more entries) matches names and command text.
 
-Иконка рисуется кодом в `Scripts/make-icon.swift`; готовый
-`Resources/AppIcon.icns` лежит в репозитории. После изменения рисунка:
-`./Scripts/make-icon.sh`.
+Stored in `~/Library/Application Support/SHTerminator/favorites.json` with mode `0600`. Don't put passwords in a command; see SECURITY.md §11.
 
-## Структура проекта
+## Notes
+
+Below the favorites in the sidebar is a **Notes** box: a plain text field for pasting something now and copying it or deleting it later.
+
+- The header buttons **copy everything** and **clear** (undo with <kbd>⌘Z</kbd>).
+- Copied text is marked as a secret: clipboard managers don't record it and it isn't synced to your other devices.
+- Drag the divider between favorites and notes to change its height.
+- The text is shared by all windows and kept across restarts in `~/Library/Application Support/SHTerminator/notes.txt` (`0600`, deleted when you clear it). To keep notes in memory only, turn off **Keep Notes Across Restarts** (SECURITY.md §12).
+
+## Security
+
+<img src="docs/screenshots/lock.png" alt="The lock screen hiding a window's panes until Touch ID or a password unlocks it" width="900">
+
+Settings in the **sh_terminator** app menu:
+
+| Setting | Default | What it does |
+|---|---|---|
+| **Secure Keyboard Entry** | on | Other processes' event taps (keyloggers) see nothing you type here (§13). |
+| **Lock Now** <kbd>⌃⌘L</kbd> / **Auto-Lock** | — | Hides all windows, now or after N idle minutes. Unlock with Touch ID or your password (§14). |
+| **Lock When Mac Sleeps or Screen Locks** | on | Also locks on sleep, screen lock and user switching. |
+| **Hide Windows When in Background** | off | Covers windows while another app is active. |
+| **Show Pane Title in Window Title** | off | The window title is visible outside the window (Dock, Mission Control, Accessibility). |
+| **Keep Notes Across Restarts** | on | When off, notes live in memory only and the file is deleted (§12). |
+
+The full threat model, how to check each protection, and the risks that remain are in **[SECURITY.md](SECURITY.md)** (in Russian).
+
+## Project layout
 
 ```
 Sources/SHTerminator/
-  main.swift                  — запуск NSApplication
-  AppDelegate.swift           — меню, список открытых окон
-  PTY/PaneSession.swift       — один шелл-процесс на отдельном pty = одна панель
-  PTY/TerminalPaneView.swift  — view SwiftTerm + проверка вставки и перехват ввода для broadcast
-  Layout/PaneNode.swift       — дерево раскладки (как в tmux/iTerm2)
-  Layout/SplitPaneController.swift — дерево → живая иерархия NSSplitView, навигация, broadcast
-  Layout/PaneContainerView.swift — панель = заголовок + терминал
-  Layout/PaneTemplates.swift  — готовые раскладки 2/4/6/8/10 панелей
-  UI/                         — окно, меню, equal-split NSSplitView
-  Favorites/                  — избранные команды: хранилище, меню, окно управления, боковая панель, подстановки
-  Notes/                      — блок заметок под избранным и его хранилище
-  Settings/AppSettings.swift  — немногочисленные настройки (UserDefaults)
-  Security/SecurityHardening.swift — чек-лист защиты: процесс, окна, Secure Input, буфер обмена, файлы 0600
-  Security/PrivacyLock.swift  — блокировка окон
-  Security/PastePolicy.swift  — правила проверки вставки
-  Security/HostRequestFilter.swift — что программа в панели может попросить у терминала (буфер обмена, ссылки)
-  Security/HostOutputFilter.swift  — обезвреживание запросов чтения экрана и локальных файлов в выводе программы
-Tests/SHTerminatorTests/      — swift test (Swift Testing)
-Scripts/audit.sh              — механическая проверка утверждений SECURITY.md
+  main.swift                       NSApplication entry point
+  AppDelegate.swift                menus, open windows
+  PTY/PaneSession.swift            one shell process on its own pty = one pane
+  PTY/TerminalPaneView.swift       SwiftTerm view + paste checks + broadcast input hook
+  Layout/PaneNode.swift            layout tree (same shape as tmux/iTerm2)
+  Layout/SplitPaneController.swift tree → live NSSplitView hierarchy, navigation, broadcast
+  Layout/PaneContainerView.swift   pane = header + terminal
+  Layout/PaneTemplates.swift       ready-made 2/4/6/8/10-pane layouts
+  UI/                              window, menus, equal-split NSSplitView
+  Favorites/                       store, menu, manager window, sidebar, placeholders
+  Notes/                           notes box and its store
+  Settings/AppSettings.swift       the few settings (UserDefaults)
+  Security/SecurityHardening.swift process, window, Secure Input, clipboard, 0600 files
+  Security/PrivacyLock.swift       window lock
+  Security/PastePolicy.swift       paste check rules
+  Security/HostRequestFilter.swift what a program in a pane may ask the terminal for
+  Security/HostOutputFilter.swift  neutralises screen-read and local-file requests in output
+Tests/SHTerminatorTests/           swift test (Swift Testing)
+Scripts/audit.sh                   mechanical check of SECURITY.md claims
+Scripts/make-icon.swift            the app icon, drawn in code (./Scripts/make-icon.sh)
 ```
 
-Единственная внешняя зависимость — [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm),
-запинена точной версией в `Package.swift`/`Package.resolved`. Подробности и
-обоснование — в SECURITY.md.
+The only external dependency is [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm), pinned to an exact version in `Package.swift` / `Package.resolved`. SECURITY.md explains why.
 
-## Вне текущего скоупа
+## Out of scope
 
-Окно Preferences (тема/шрифт/шелл по умолчанию), вкладки, сохранение и
-восстановление *раскладки* окна (без содержимого панелей), экспорт лога
-сессии по явному запросу пользователя. Не реализовано — делается только по
-отдельной просьбе.
+A Preferences window (theme, font, default shell), tabs, saving and restoring a window's *layout* (without pane contents), and exporting a session log on request. None of these are implemented; they would only be added if someone explicitly asks for them.

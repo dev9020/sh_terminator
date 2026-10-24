@@ -85,10 +85,18 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     private func handleClick(_ event: NSEvent) {
-        guard event.window === window, !PrivacyLock.shared.isEngaged, let contentView = window?.contentView else { return }
-        let location = contentView.convert(event.locationInWindow, from: nil)
-        guard let hitView = contentView.hitTest(location), let session = splitController.session(containing: hitView) else { return }
+        guard event.window === window, !PrivacyLock.shared.isEngaged, let session = session(atWindowLocation: event.locationInWindow) else { return }
         splitController.focus(session)
+    }
+
+    /// The pane under a point in window coordinates. `hitTest` takes a point
+    /// in the *superview's* coordinates: the content view is a (flipped)
+    /// split view, so converting into its own space would mirror y and hit
+    /// the bottom pane for a click on the top one.
+    func session(atWindowLocation location: NSPoint) -> PaneSession? {
+        guard let contentView = window?.contentView, let frameView = contentView.superview,
+              let hitView = contentView.hitTest(frameView.convert(location, from: nil)) else { return nil }
+        return splitController.session(containing: hitView)
     }
 
     /// Names of the programs (other than the shells themselves) still

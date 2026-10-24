@@ -20,7 +20,11 @@ final class PaneContainerView: NSView {
         titleLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         titleLabel.lineBreakMode = .byTruncatingMiddle
         titleLabel.alignment = .center
-        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        // Below NSSplitView's holding priority (250): otherwise the label's
+        // default hugging (251) wins over the split view's sizes and shrinks
+        // a nested split's column to the width of its title.
+        titleLabel.setContentCompressionResistancePriority(.init(1), for: .horizontal)
+        titleLabel.setContentHuggingPriority(.init(1), for: .horizontal)
 
         let terminal = session.terminalView
         for view in [header, titleLabel, terminal] as [NSView] {

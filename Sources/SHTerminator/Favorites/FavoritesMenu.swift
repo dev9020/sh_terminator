@@ -22,20 +22,31 @@ final class FavoritesMenu: NSObject {
     private func rebuild() {
         menu.removeAllItems()
 
-        let favorites = FavoritesStore.shared.items
-        if favorites.isEmpty {
+        let store = FavoritesStore.shared
+        if store.items.isEmpty {
             let empty = NSMenuItem(title: "No Favorites Yet", action: nil, keyEquivalent: "")
             empty.isEnabled = false
             menu.addItem(empty)
         }
-        for (index, favorite) in favorites.enumerated() {
-            let key = index < 9 ? String(index + 1) : ""
-            let item = NSMenuItem(title: favorite.name, action: #selector(PaneWindowController.insertFavorite(_:)), keyEquivalent: key)
-            item.keyEquivalentModifierMask = [.command]
-            item.representedObject = favorite.id
-            // No tooltip with the command: tooltips (like menus) are
-            // separate windows that screenshots and screen sharing capture.
-            menu.addItem(item)
+        // Once there are categories, each non-empty one gets a heading and
+        // its favorites are indented under it. Shortcuts follow display order.
+        let showsHeadings = !store.categories.isEmpty
+        var index = 0
+        for section in store.sections where !section.favorites.isEmpty {
+            if showsHeadings {
+                menu.addItem(Self.heading(section.name))
+            }
+            for favorite in section.favorites {
+                let key = index < 9 ? String(index + 1) : ""
+                let item = NSMenuItem(title: favorite.name, action: #selector(PaneWindowController.insertFavorite(_:)), keyEquivalent: key)
+                item.keyEquivalentModifierMask = [.command]
+                item.representedObject = favorite.id
+                item.indentationLevel = showsHeadings ? 1 : 0
+                // No tooltip with the command: tooltips (like menus) are
+                // separate windows that screenshots and screen sharing capture.
+                menu.addItem(item)
+                index += 1
+            }
         }
 
         menu.addItem(.separator())
@@ -49,5 +60,14 @@ final class FavoritesMenu: NSObject {
         manage.keyEquivalentModifierMask = [.command, .shift]
         manage.target = appDelegate
         menu.addItem(manage)
+    }
+
+    private static func heading(_ title: String) -> NSMenuItem {
+        if #available(macOS 14, *) {
+            return .sectionHeader(title: title)
+        }
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        return item
     }
 }

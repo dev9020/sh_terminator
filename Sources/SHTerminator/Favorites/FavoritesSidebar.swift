@@ -14,9 +14,14 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
 
     private let tableView = NSTableView()
     private let searchField = PlainSearchField()
-    /// The favorites matching the search, with their index in the full list
-    /// (which decides their ⌘1…⌘9 shortcut).
-    private var visible: [(index: Int, favorite: Favorite)] = []
+    /// What the list shows: the favorites matching the search, each with
+    /// its index in display order (which decides its ⌘1…⌘9 shortcut),
+    /// under a heading per category once the user has made any.
+    private enum Row {
+        case heading(String)
+        case favorite(index: Int, Favorite)
+    }
+    private var rows: [Row] = []
     private let notes = NotesPanel()
     private let emptyLabel = NSTextField(wrappingLabelWithString: "No favorites yet.\nAdd one with ⌘⇧F, or select a command in the terminal and press ⌘⇧S.")
 
@@ -33,12 +38,24 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
 
     private func reload() {
         let query = searchField.stringValue.trimmingCharacters(in: .whitespaces)
-        visible = FavoritesStore.shared.items.enumerated()
-            .filter { query.isEmpty || $0.element.name.localizedCaseInsensitiveContains(query) || $0.element.command.localizedCaseInsensitiveContains(query) }
-            .map { ($0.offset, $0.element) }
+        let store = FavoritesStore.shared
+        let showsHeadings = !store.categories.isEmpty
+        rows = []
+        var index = 0
+        for section in store.sections {
+            var matches: [Row] = []
+            for favorite in section.favorites {
+                if query.isEmpty || favorite.name.localizedCaseInsensitiveContains(query) || favorite.command.localizedCaseInsensitiveContains(query) {
+                    matches.append(.favorite(index: index, favorite))
+                }
+                index += 1
+            }
+            if showsHeadings && !matches.isEmpty { rows.append(.heading(section.name)) }
+            rows += matches
+        }
         tableView.reloadData()
-        emptyLabel.isHidden = !FavoritesStore.shared.items.isEmpty
-        searchField.isHidden = FavoritesStore.shared.items.count < 2 && query.isEmpty
+        emptyLabel.isHidden = !store.items.isEmpty
+        searchField.isHidden = store.items.count < 2 && query.isEmpty
     }
 
     func controlTextDidChange(_ notification: Notification) {
@@ -149,19 +166,37 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
 
     @objc private func rowClicked(_ sender: Any?) {
         let row = tableView.clickedRow
-        guard visible.indices.contains(row) else { return }
-        onPick?(visible[row].favorite)
+        guard rows.indices.contains(row), case .favorite(_, let favorite) = rows[row] else { return }
+        onPick?(favorite)
     }
 
     // MARK: - NSTableViewDataSource / Delegate
 
     func numberOfRows(in tableView: NSTableView) -> Int {
-        visible.count
+        rows.count
+    }
+
+    func tableView(_ tableView: NSTableView, isGroupRow row: Int) -> Bool {
+        if case .heading = rows[row] { return true }
+        return false
+    }
+
+    func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
+        !self.tableView(tableView, isGroupRow: row)
+    }
+
+    func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
+        self.tableView(tableView, isGroupRow: row) ? 22 : tableView.rowHeight
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        guard case .favorite(let index, let favorite) = rows[row] else {
+            guard case .heading(let title) = rows[row] else { return nil }
+            let heading = (tableView.makeView(withIdentifier: HeadingCell.identifier, owner: self) as? HeadingCell) ?? HeadingCell()
+            heading.label.stringValue = title
+            return heading
+        }
         let cell = (tableView.makeView(withIdentifier: FavoriteCell.identifier, owner: self) as? FavoriteCell) ?? FavoriteCell()
-        let (index, favorite) = visible[row]
         cell.nameLabel.stringValue = index < 9 ? "\(favorite.name)  ⌘\(index + 1)" : favorite.name
         cell.commandLabel.stringValue = favorite.command
         // No tooltip with the command: the tooltip is a separate window
@@ -202,6 +237,32 @@ private final class FavoriteCell: NSTableCellView {
         for label in [nameLabel, commandLabel] {
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         }
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not used")
+    }
+}
+
+private final class HeadingCell: NSTableCellView {
+    static let identifier = NSUserInterfaceItemIdentifier("HeadingCell")
+
+    let label = NSTextField(labelWithString: "")
+
+    init() {
+        super.init(frame: .zero)
+        identifier = Self.identifier
+        label.font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .semibold)
+        label.textColor = .secondaryLabelColor
+        label.lineBreakMode = .byTruncatingTail
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -4),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
+        ])
     }
 
     required init?(coder: NSCoder) {
