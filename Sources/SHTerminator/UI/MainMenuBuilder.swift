@@ -132,6 +132,8 @@ enum MainMenuBuilder {
         viewMenu.addItem(biggerAlias)
         viewMenu.addItem(item("Smaller", #selector(AppDelegate.decreaseFontSize(_:)), "-", target: appDelegate))
         viewMenu.addItem(item("Default Font Size", #selector(AppDelegate.resetFontSize(_:)), "0", target: appDelegate))
+        viewMenu.addItem(.separator())
+        viewMenu.addItem(item("Show Shortcuts Bar", #selector(AppDelegate.toggleShortcutsBar(_:)), "/", target: appDelegate))
 
         let menuItem = NSMenuItem()
         menuItem.submenu = viewMenu

@@ -7,6 +7,8 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     let splitController: SplitPaneController
     private let favoritesSidebar = FavoritesSidebar()
     private let sidebarSplit = ThemedSplitView()
+    /// Holds `sidebarSplit` above the shortcuts bar.
+    private let content: WindowContentView
     private let lockScreen = LockScreenView()
     private var clickMonitor: Any?
     /// Set once the user agreed to close despite running programs, so the
@@ -20,6 +22,7 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     init(root: PaneNode) {
         self.splitController = SplitPaneController(root: root)
+        self.content = WindowContentView(main: sidebarSplit)
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1080 + Self.sidebarWidth, height: 680),
@@ -39,7 +42,8 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         sidebarSplit.addArrangedSubview(favoritesSidebar.view)
         sidebarSplit.setHoldingPriority(NSLayoutConstraint.Priority(250), forSubviewAt: 0)
         sidebarSplit.setHoldingPriority(NSLayoutConstraint.Priority(260), forSubviewAt: 1)
-        window.contentView = sidebarSplit
+        window.contentView = content
+        content.showsShortcutsBar = AppSettings.showShortcutsBar
         sidebarSplit.layoutSubtreeIfNeeded()
         sidebarSplit.setPosition(sidebarSplit.bounds.width - Self.sidebarWidth, ofDividerAt: 0)
         window.center()
@@ -91,8 +95,8 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     /// The pane under a point in window coordinates. `hitTest` takes a point
-    /// in the *superview's* coordinates: the content view is a (flipped)
-    /// split view, so converting into its own space would mirror y and hit
+    /// in the *superview's* coordinates: the panes sit in (flipped) split
+    /// views, so converting into its own space would mirror y and hit
     /// the bottom pane for a click on the top one.
     func session(atWindowLocation location: NSPoint) -> PaneSession? {
         guard let contentView = window?.contentView, let frameView = contentView.superview,
@@ -120,6 +124,7 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     @objc private func settingsDidChange(_ notification: Notification) {
         updateWindowTitle()
+        content.showsShortcutsBar = AppSettings.showShortcutsBar
     }
 
     // MARK: - Privacy lock
@@ -143,8 +148,8 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
                 window.contentView = lockScreen
             }
             window.makeFirstResponder(lockScreen)
-        } else if window.contentView !== sidebarSplit {
-            window.contentView = sidebarSplit
+        } else if window.contentView !== content {
+            window.contentView = content
             splitController.focus(splitController.focusedSession)
         }
     }

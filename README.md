@@ -83,6 +83,8 @@ swift test
 
 Templates are under **File → New Window From Template** (2, 4, 6, 8 or 10 panes). Clicking a pane also focuses it.
 
+The main ones are also listed in a bar along the bottom of every window; **View → Show Shortcuts Bar** (<kbd>⌘/</kbd>) hides it.
+
 ## Panes
 
 - Each pane has a slim header showing the title the program set, or **program — directory** (for example `ssh — ~/work`). The header text only goes into the window title if you turn on **Show Pane Title in Window Title**, which is off by default (SECURITY.md §17).

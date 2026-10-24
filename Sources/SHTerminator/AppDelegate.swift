@@ -131,6 +131,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         AppSettings.showLauncher.toggle()
     }
 
+    @objc func toggleShortcutsBar(_ sender: Any?) {
+        AppSettings.showShortcutsBar.toggle()
+    }
+
     @objc func increaseFontSize(_ sender: Any?) { changeFontSize(by: 1) }
     @objc func decreaseFontSize(_ sender: Any?) { changeFontSize(by: -1) }
 
@@ -167,6 +171,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             menuItem.state = AppSettings.persistNotes ? .on : .off
         case #selector(toggleLauncher(_:)):
             menuItem.state = AppSettings.showLauncher ? .on : .off
+        case #selector(toggleShortcutsBar(_:)):
+            menuItem.state = AppSettings.showShortcutsBar ? .on : .off
         case #selector(lockNow(_:)):
             return PrivacyLock.shared.state != .locked
         default:

@@ -19,6 +19,7 @@ enum AppSettings {
         static let persistNotes = "persistNotes"
         static let fontSize = "fontSize"
         static let showLauncher = "showLauncher"
+        static let showShortcutsBar = "showShortcutsBar"
     }
 
     static func registerDefaults() {
@@ -31,6 +32,7 @@ enum AppSettings {
             Key.persistNotes: true,
             Key.fontSize: 0.0,
             Key.showLauncher: true,
+            Key.showShortcutsBar: true,
         ])
     }
 
@@ -87,6 +89,12 @@ enum AppSettings {
     static var showLauncher: Bool {
         get { defaults.bool(forKey: Key.showLauncher) }
         set { set(newValue, for: Key.showLauncher) }
+    }
+
+    /// Show the `ShortcutsBar` along the bottom of every terminal window.
+    static var showShortcutsBar: Bool {
+        get { defaults.bool(forKey: Key.showShortcutsBar) }
+        set { set(newValue, for: Key.showShortcutsBar) }
     }
 
     private static func set(_ value: Any, for key: String) {
