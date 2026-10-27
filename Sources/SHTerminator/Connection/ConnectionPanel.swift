@@ -12,6 +12,12 @@ final class ConnectionPanel: NSObject {
     private let vpnValue = ConnectionPanel.valueLabel()
     private let proxyValue = ConnectionPanel.valueLabel()
     private let panesValue = ConnectionPanel.valueLabel()
+    private let sectionTitle = Theme.sectionLabel("CONNECTION")
+    private let note = NSTextField(wrappingLabelWithString: "Addresses on this Mac only. The public IP isn't looked up: the app makes no network requests.")
+    private let separator = NSView()
+    private let keyLabels = ["LAN", "VPN", "SYS PROXY", "PANE PROXY"].map { ConnectionPanel.keyLabel($0) }
+    private var refreshButton: NSButton!
+    private var proxyButton: NSButton!
 
     override init() {
         super.init()
@@ -65,35 +71,27 @@ final class ConnectionPanel: NSObject {
     // MARK: - UI
 
     private func buildUI() {
-        let title = Theme.sectionLabel("CONNECTION")
-        let refresh = Theme.iconButton("arrow.clockwise", "Refresh", target: self, action: #selector(refresh(_:)))
+        refreshButton = Theme.iconButton("arrow.clockwise", "Refresh", target: self, action: #selector(refresh(_:)))
         // Same panel as sh_terminator → Proxy for Panes…
-        let proxy = Theme.iconButton("network", "Proxy for Panes", target: self, action: #selector(showProxy(_:)))
-        proxy.toolTip = "Proxy for Panes…"
-        let header = NSStackView(views: [title, NSView(), proxy, refresh])
+        proxyButton = Theme.iconButton("network", "Proxy for Panes", target: self, action: #selector(showProxy(_:)))
+        proxyButton.toolTip = "Proxy for Panes…"
+        let header = NSStackView(views: [sectionTitle, NSView(), proxyButton, refreshButton])
         header.orientation = .horizontal
         header.spacing = 6
         header.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 10)
 
-        let grid = NSGridView(views: [
-            [Self.keyLabel("LAN"), localValue],
-            [Self.keyLabel("VPN"), vpnValue],
-            [Self.keyLabel("SYS PROXY"), proxyValue],
-            [Self.keyLabel("PANE PROXY"), panesValue],
-        ])
+        let grid = NSGridView(views: zip(keyLabels, [localValue, vpnValue, proxyValue, panesValue]).map { [$0, $1] as [NSView] })
         grid.rowSpacing = 6
         grid.columnSpacing = 8
         grid.column(at: 0).xPlacement = .leading
         grid.rowAlignment = .firstBaseline
 
         // Said here so no one takes these for the address websites see.
-        let note = NSTextField(wrappingLabelWithString: "Addresses on this Mac only. The public IP isn't looked up: the app makes no network requests.")
         note.font = Theme.mono(9)
-        note.textColor = Theme.dimRed
 
-        let separator = NSView()
         separator.wantsLayer = true
-        separator.layer?.backgroundColor = Theme.faintRed.cgColor
+
+        applyTheme()
 
         for subview in [separator, header, grid, note] {
             subview.translatesAutoresizingMaskIntoConstraints = false
@@ -121,10 +119,19 @@ final class ConnectionPanel: NSObject {
         }
     }
 
+    func applyTheme() {
+        sectionTitle.textColor = Theme.red
+        refreshButton.contentTintColor = Theme.red
+        proxyButton.contentTintColor = Theme.red
+        note.textColor = Theme.dimRed
+        separator.layer?.backgroundColor = Theme.faintRed.cgColor
+        for label in keyLabels { label.textColor = Theme.muted }
+        update()
+    }
+
     private static func keyLabel(_ text: String) -> NSTextField {
         let label = NSTextField(labelWithString: text)
         label.font = Theme.mono(10, .bold)
-        label.textColor = Theme.muted
         return label
     }
 

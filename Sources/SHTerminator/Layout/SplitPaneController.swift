@@ -161,6 +161,15 @@ final class SplitPaneController: NSObject {
         }
     }
 
+    /// Re-themes every pane's terminal and header; the pane borders
+    /// themselves pick it up from `Theme` on their next draw.
+    func applyTheme() {
+        for session in root.leaves() {
+            session.applyTheme()
+        }
+        updatePaneHeaders()
+    }
+
     // MARK: - Broadcast
 
     func toggleBroadcast() {

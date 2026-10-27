@@ -12,6 +12,16 @@ final class ProxyWindowController: NSWindowController, NSWindowDelegate, NSTable
     private let removeButton = NSButton()
     private let editButton = NSButton()
     private let statusLabel = NSTextField(wrappingLabelWithString: "")
+    private let toolsTitle = Theme.sectionLabel("SEND THROUGH THE PROXY")
+    private let info = NSTextField(wrappingLabelWithString: """
+        Applies to every zsh pane from its next command on; one proxy at a time. \
+        curl, git (https and ssh remotes) and brew get it from all_proxy/https_proxy; \
+        ssh, scp and sftp through a helper set as ProxyCommand. \
+        Passwords are saved in a file only you can read (proxies.json, 0600); a wrapped program sees the proxy URL, \
+        password included, in its environment. \
+        Through a proxy you don't run yourself, check the server's key fingerprint \
+        the first time you connect with ssh.
+        """)
     private var toolBoxes: [ProxyTool: NSButton] = [:]
 
     /// The fields of the add/edit dialog while it is open, so a URL pasted
@@ -49,6 +59,7 @@ final class ProxyWindowController: NSWindowController, NSWindowDelegate, NSTable
         panel.center()
 
         NotificationCenter.default.addObserver(self, selector: #selector(storeDidChange(_:)), name: ProxyStore.didChange, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(applyTheme), name: AppSettings.didChange, object: nil)
     }
 
     required init?(coder: NSCoder) {
@@ -101,7 +112,6 @@ final class ProxyWindowController: NSWindowController, NSWindowDelegate, NSTable
         listButtons.orientation = .horizontal
         listButtons.spacing = 6
 
-        let toolsTitle = Theme.sectionLabel("SEND THROUGH THE PROXY")
         let toolTitles: [ProxyTool: String] = [.curl: "curl", .git: "git", .brew: "brew", .ssh: "ssh, scp, sftp"]
         let toolsRow = NSStackView()
         toolsRow.orientation = .horizontal
@@ -114,18 +124,7 @@ final class ProxyWindowController: NSWindowController, NSWindowDelegate, NSTable
         }
 
         statusLabel.font = Theme.mono(11, .bold)
-
-        let info = NSTextField(wrappingLabelWithString: """
-            Applies to every zsh pane from its next command on; one proxy at a time. \
-            curl, git (https and ssh remotes) and brew get it from all_proxy/https_proxy; \
-            ssh, scp and sftp through a helper set as ProxyCommand. \
-            Passwords are saved in a file only you can read (proxies.json, 0600); a wrapped program sees the proxy URL, \
-            password included, in its environment. \
-            Through a proxy you don't run yourself, check the server's key fingerprint \
-            the first time you connect with ssh.
-            """)
         info.font = Theme.mono(10)
-        info.textColor = Theme.muted
 
         let content = NSStackView(views: [scroll, listButtons, toolsTitle, toolsRow, statusLabel, info])
         content.orientation = .vertical
@@ -187,6 +186,19 @@ final class ProxyWindowController: NSWindowController, NSWindowDelegate, NSTable
 
     @objc private func storeDidChange(_ notification: Notification) {
         reload()
+    }
+
+    /// Re-applies `Theme` colors: the panel background, the table
+    /// background, the static labels, and every row (by reloading — its
+    /// cells are built fresh each time, already in the current colors).
+    @objc func applyTheme() {
+        guard let window = window as? NSPanel else { return }
+        Theme.style(window: window)
+        tableView.backgroundColor = Theme.panel
+        toolsTitle.textColor = Theme.red
+        info.textColor = Theme.muted
+        reload()
+        window.contentView?.forceRedisplayTree()
     }
 
     // MARK: - Actions

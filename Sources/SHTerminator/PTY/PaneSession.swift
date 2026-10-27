@@ -28,7 +28,7 @@ final class PaneSession: NSObject, LocalProcessTerminalViewDelegate {
         terminalView = TerminalPaneView(frame: .zero)
         super.init()
         terminalView.processDelegate = self
-        Theme.style(terminal: terminalView)
+        applyTheme()
         applyFontSize()
         startShell(in: currentDirectory ?? NSHomeDirectory())
     }
@@ -84,6 +84,12 @@ final class PaneSession: NSObject, LocalProcessTerminalViewDelegate {
             }
         }
         terminal.clearScrollback()
+    }
+
+    // MARK: - Theme
+
+    func applyTheme() {
+        Theme.style(terminal: terminalView)
     }
 
     // MARK: - Font

@@ -9,6 +9,9 @@ final class NotesPanel: NSObject, NSTextViewDelegate {
 
     private let scrollView = NSScrollView()
     private let textView = NotesTextView()
+    private let sectionTitle = Theme.sectionLabel("NOTES")
+    private var copyButton: NSButton!
+    private var clearButton: NSButton!
 
     override init() {
         super.init()
@@ -48,12 +51,10 @@ final class NotesPanel: NSObject, NSTextViewDelegate {
     // MARK: - UI
 
     private func buildUI() {
-        let title = Theme.sectionLabel("NOTES")
+        copyButton = headerButton("doc.on.doc", "Copy All Notes", #selector(copyAll(_:)))
+        clearButton = headerButton("trash", "Clear Notes (⌘Z to undo)", #selector(clearAll(_:)))
 
-        let copy = headerButton("doc.on.doc", "Copy All Notes", #selector(copyAll(_:)))
-        let clear = headerButton("trash", "Clear Notes (⌘Z to undo)", #selector(clearAll(_:)))
-
-        let header = NSStackView(views: [title, NSView(), copy, clear])
+        let header = NSStackView(views: [sectionTitle, NSView(), copyButton, clearButton])
         header.orientation = .horizontal
         header.spacing = 6
         header.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 10)
@@ -73,16 +74,12 @@ final class NotesPanel: NSObject, NSTextViewDelegate {
         textView.importsGraphics = false
         textView.allowsUndo = true
         textView.font = Theme.mono(NSFont.smallSystemFontSize)
-        textView.textColor = Theme.terminalText
-        textView.insertionPointColor = Theme.red
-        textView.selectedTextAttributes = [.backgroundColor: Theme.selection, .foregroundColor: Theme.hot]
         textView.textContainerInset = NSSize(width: 4, height: 4)
         // Notes will often hold commands, keys or passwords.
         SecurityHardening.disableTextRewriting(in: textView)
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = true
-        textView.backgroundColor = Theme.background
-        scrollView.backgroundColor = Theme.background
+        applyTheme()
 
         for subview in [header, scrollView] {
             subview.translatesAutoresizingMaskIntoConstraints = false
@@ -105,6 +102,17 @@ final class NotesPanel: NSObject, NSTextViewDelegate {
         let button = Theme.iconButton(symbol, tip, target: self, action: action)
         button.toolTip = tip
         return button
+    }
+
+    func applyTheme() {
+        sectionTitle.textColor = Theme.red
+        copyButton.contentTintColor = Theme.red
+        clearButton.contentTintColor = Theme.red
+        textView.textColor = Theme.terminalText
+        textView.insertionPointColor = Theme.red
+        textView.selectedTextAttributes = [.backgroundColor: Theme.selection, .foregroundColor: Theme.hot]
+        textView.backgroundColor = Theme.background
+        scrollView.backgroundColor = Theme.background
     }
 }
 

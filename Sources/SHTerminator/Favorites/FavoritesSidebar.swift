@@ -26,6 +26,9 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
     private let notes = NotesPanel()
     private let connection = ConnectionPanel()
     private let emptyLabel = NSTextField(wrappingLabelWithString: "No favorites yet.\nAdd one with ⌘⇧F, or select a command in the terminal and press ⌘⇧S.")
+    private let sectionTitle = Theme.sectionLabel("FAVORITES")
+    private let manageButton = Theme.iconButton("pencil", "Manage Favorites", target: AppDelegate.shared, action: #selector(AppDelegate.showFavorites(_:)))
+    private let background = NSView()
 
     override init() {
         super.init()
@@ -64,15 +67,26 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
         reload()
     }
 
+    /// Re-applies `Theme` colors to everything already on screen: this
+    /// sidebar's own chrome, the already-built table cells, and the nested
+    /// notes/connection panels.
+    func applyTheme() {
+        sectionTitle.textColor = Theme.red
+        manageButton.contentTintColor = Theme.red
+        emptyLabel.textColor = Theme.muted
+        background.layer?.backgroundColor = Theme.panel.cgColor
+        searchField.font = Theme.mono(NSFont.smallSystemFontSize)
+        tableView.reloadData()
+        notes.applyTheme()
+        connection.applyTheme()
+    }
+
     // MARK: - UI
 
     private func buildUI() {
-        let title = Theme.sectionLabel("FAVORITES")
+        manageButton.toolTip = "Manage Favorites… (⌘⇧F)"
 
-        let manage = Theme.iconButton("pencil", "Manage Favorites", target: AppDelegate.shared, action: #selector(AppDelegate.showFavorites(_:)))
-        manage.toolTip = "Manage Favorites… (⌘⇧F)"
-
-        let header = NSStackView(views: [title, NSView(), manage])
+        let header = NSStackView(views: [sectionTitle, NSView(), manageButton])
         header.orientation = .horizontal
         header.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 10)
 
@@ -106,7 +120,6 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
         emptyLabel.textColor = Theme.muted
         emptyLabel.alignment = .center
 
-        let background = NSView()
         background.wantsLayer = true
         background.layer?.backgroundColor = Theme.panel.cgColor
 
@@ -208,11 +221,13 @@ final class FavoritesSidebar: NSObject, NSTableViewDataSource, NSTableViewDelega
             guard case .heading(let title) = rows[row] else { return nil }
             let heading = (tableView.makeView(withIdentifier: HeadingCell.identifier, owner: self) as? HeadingCell) ?? HeadingCell()
             heading.label.stringValue = "▸ " + title.uppercased()
+            heading.applyTheme()
             return heading
         }
         let cell = (tableView.makeView(withIdentifier: FavoriteCell.identifier, owner: self) as? FavoriteCell) ?? FavoriteCell()
         cell.nameLabel.stringValue = index < 9 ? "\(favorite.name)  ⌘\(index + 1)" : favorite.name
         cell.commandLabel.stringValue = favorite.command
+        cell.applyTheme()
         // No tooltip with the command: the tooltip is a separate window
         // that, unlike this one, screenshots and screen sharing capture.
         return cell
@@ -230,11 +245,10 @@ private final class FavoriteCell: NSTableCellView {
         identifier = Self.identifier
 
         nameLabel.font = Theme.mono(12, .semibold)
-        nameLabel.textColor = Theme.red
         nameLabel.lineBreakMode = .byTruncatingTail
         commandLabel.font = Theme.mono(10)
-        commandLabel.textColor = Theme.muted
         commandLabel.lineBreakMode = .byTruncatingMiddle
+        applyTheme()
 
         let stack = NSStackView(views: [nameLabel, commandLabel])
         stack.orientation = .vertical
@@ -257,6 +271,11 @@ private final class FavoriteCell: NSTableCellView {
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is not used")
     }
+
+    func applyTheme() {
+        nameLabel.textColor = Theme.red
+        commandLabel.textColor = Theme.muted
+    }
 }
 
 private final class HeadingCell: NSTableCellView {
@@ -268,8 +287,8 @@ private final class HeadingCell: NSTableCellView {
         super.init(frame: .zero)
         identifier = Self.identifier
         label.font = Theme.mono(10, .bold)
-        label.textColor = Theme.muted
         label.lineBreakMode = .byTruncatingTail
+        applyTheme()
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(label)
@@ -282,6 +301,10 @@ private final class HeadingCell: NSTableCellView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is not used")
+    }
+
+    func applyTheme() {
+        label.textColor = Theme.muted
     }
 }
 

@@ -114,6 +114,20 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         splitController.applyFontSize()
     }
 
+    /// Re-applies every `Theme` color in this window: the window background,
+    /// every pane and its terminal, the favorites sidebar (with the notes
+    /// and connection panel inside it), the shortcuts bar, and the lock
+    /// screen.
+    func applyTheme() {
+        guard let window else { return }
+        Theme.style(window: window)
+        splitController.applyTheme()
+        favoritesSidebar.applyTheme()
+        content.applyTheme()
+        lockScreen.applyTheme()
+        window.contentView?.forceRedisplayTree()
+    }
+
     /// The window title is visible outside the window (Dock menu, Mission
     /// Control, Accessibility, other apps' window lists), so it repeats the
     /// pane's title only if the user asked for that, and never while locked.
@@ -125,6 +139,7 @@ final class PaneWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     @objc private func settingsDidChange(_ notification: Notification) {
         updateWindowTitle()
         content.updateShortcutsBar()
+        applyTheme()
     }
 
     // MARK: - Privacy lock

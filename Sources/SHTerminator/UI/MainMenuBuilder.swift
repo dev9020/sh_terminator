@@ -136,6 +136,16 @@ enum MainMenuBuilder {
         viewMenu.addItem(item("Default Font Size", #selector(AppDelegate.resetFontSize(_:)), "0", target: appDelegate))
         viewMenu.addItem(.separator())
         viewMenu.addItem(item("Show Shortcuts Bar", #selector(AppDelegate.toggleShortcutsBar(_:)), "/", target: appDelegate))
+        viewMenu.addItem(.separator())
+        let themeMenu = NSMenu(title: "Theme")
+        for (title, scheme) in [("Dark", AppSettings.ColorScheme.dark), ("Light", AppSettings.ColorScheme.light)] {
+            let entry = item(title, #selector(AppDelegate.setColorScheme(_:)), "", target: appDelegate)
+            entry.tag = scheme == .dark ? 0 : 1
+            themeMenu.addItem(entry)
+        }
+        let themeItem = NSMenuItem(title: "Theme", action: nil, keyEquivalent: "")
+        themeItem.submenu = themeMenu
+        viewMenu.addItem(themeItem)
 
         let menuItem = NSMenuItem()
         menuItem.submenu = viewMenu

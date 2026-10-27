@@ -89,6 +89,18 @@ final class LockScreenView: NSView {
     @objc private func unlockClicked(_ sender: Any?) {
         PrivacyLock.shared.unlock()
     }
+
+    func applyTheme() {
+        layer?.backgroundColor = Theme.background.cgColor
+        iconView.contentTintColor = Theme.hot
+        titleLabel.textColor = Theme.red
+        let glow = NSShadow()
+        glow.shadowColor = Theme.red
+        glow.shadowBlurRadius = 10
+        titleLabel.shadow = glow
+        subtitleLabel.textColor = Theme.muted
+        scene.applyTheme()
+    }
 }
 
 /// The animated backdrop of `LockScreenView`, as a layer-hosting view: the
@@ -192,6 +204,17 @@ private final class LockSceneView: NSView {
 
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
+        needsLayout = true
+    }
+
+    /// Forces the rain and the HUD to rebuild from scratch, which bakes in
+    /// whatever `Theme` now says.
+    func applyTheme() {
+        layer?.backgroundColor = Theme.background.cgColor
+        let background = Theme.background
+        haloLayer.colors = [background.withAlphaComponent(0.95), background.withAlphaComponent(0.85), background.withAlphaComponent(0)].map(\.cgColor)
+        rainSize = .zero
+        hudSize = .zero
         needsLayout = true
     }
 

@@ -25,16 +25,15 @@ final class ShortcutsBar: NSView {
     ]
 
     private let label = NSTextField(labelWithString: "")
+    private let border = NSView()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        layer?.backgroundColor = Theme.panel.cgColor
-        let border = NSView()
         border.wantsLayer = true
-        border.layer?.backgroundColor = Theme.faintRed.cgColor
         border.translatesAutoresizingMaskIntoConstraints = false
         addSubview(border)
+        applyTheme()
 
         label.maximumNumberOfLines = 1
         label.toolTip = Self.shortcuts.map { "\($0.0)  \($0.1)" }.joined(separator: "\n")
@@ -58,6 +57,11 @@ final class ShortcutsBar: NSView {
 
     func update(showsShortcuts: Bool, weakened: [String]) {
         label.attributedStringValue = Self.text(showsShortcuts: showsShortcuts, weakened: weakened)
+    }
+
+    func applyTheme() {
+        layer?.backgroundColor = Theme.panel.cgColor
+        border.layer?.backgroundColor = Theme.faintRed.cgColor
     }
 
     private static func text(showsShortcuts: Bool, weakened: [String]) -> NSAttributedString {
@@ -109,6 +113,11 @@ final class WindowContentView: NSView {
         shortcutsBar.update(showsShortcuts: AppSettings.showShortcutsBar, weakened: weakened)
         shortcutsBar.isHidden = !AppSettings.showShortcutsBar && weakened.isEmpty
         placeSubviews()
+    }
+
+    func applyTheme() {
+        shortcutsBar.applyTheme()
+        updateShortcutsBar()
     }
 
     override func resizeSubviews(withOldSize oldSize: NSSize) {

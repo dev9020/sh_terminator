@@ -143,6 +143,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         AppSettings.showShortcutsBar.toggle()
     }
 
+    /// The menu item's tag is 0 for Dark, 1 for Light.
+    @objc func setColorScheme(_ sender: Any?) {
+        guard let item = sender as? NSMenuItem else { return }
+        AppSettings.colorScheme = item.tag == 0 ? .dark : .light
+        Theme.applyToApp()
+        // Every window observes AppSettings.didChange and rethemes itself.
+    }
+
     @objc func increaseFontSize(_ sender: Any?) { changeFontSize(by: 1) }
     @objc func decreaseFontSize(_ sender: Any?) { changeFontSize(by: -1) }
 
@@ -181,6 +189,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             menuItem.state = AppSettings.showLauncher ? .on : .off
         case #selector(toggleShortcutsBar(_:)):
             menuItem.state = AppSettings.showShortcutsBar ? .on : .off
+        case #selector(setColorScheme(_:)):
+            menuItem.state = (AppSettings.colorScheme == .dark ? 0 : 1) == menuItem.tag ? .on : .off
         case #selector(lockNow(_:)):
             return PrivacyLock.shared.state != .locked
         default:

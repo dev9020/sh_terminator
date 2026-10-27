@@ -14,6 +14,13 @@ enum AppSettings {
     /// Posted after any setting below changes.
     static let didChange = Notification.Name("AppSettingsDidChange")
 
+    /// The app's two looks. Dark is what every window opens with the very
+    /// first time the app runs; the user can switch to light from the menu,
+    /// and that choice sticks across restarts.
+    enum ColorScheme: String {
+        case dark, light
+    }
+
     private static let defaults = UserDefaults.standard
 
     private enum Key {
@@ -26,6 +33,7 @@ enum AppSettings {
         static let fontSize = "fontSize"
         static let showLauncher = "showLauncher"
         static let showShortcutsBar = "showShortcutsBar"
+        static let colorScheme = "colorScheme"
     }
 
     /// Every setting as read at launch, then as changed in the app.
@@ -43,12 +51,14 @@ enum AppSettings {
             Key.fontSize: 0.0,
             Key.showLauncher: true,
             Key.showShortcutsBar: true,
+            Key.colorScheme: ColorScheme.dark.rawValue,
         ])
         for key in [Key.secureKeyboardEntry, Key.hideWhenInactive, Key.lockOnSleep, Key.paneTitleInWindowTitle, Key.persistNotes, Key.showLauncher, Key.showShortcutsBar] {
             values[key] = defaults.bool(forKey: key)
         }
         values[Key.autoLockMinutes] = defaults.integer(forKey: Key.autoLockMinutes)
         values[Key.fontSize] = defaults.double(forKey: Key.fontSize)
+        values[Key.colorScheme] = defaults.string(forKey: Key.colorScheme)
     }
 
     /// Keystrokes typed into this app can't be seen by other processes'
@@ -110,6 +120,13 @@ enum AppSettings {
     static var showShortcutsBar: Bool {
         get { bool(Key.showShortcutsBar) }
         set { set(newValue, for: Key.showShortcutsBar) }
+    }
+
+    /// Dark or light look for every window. Dark the first time the app
+    /// ever runs; whatever the user picks afterwards persists.
+    static var colorScheme: ColorScheme {
+        get { ColorScheme(rawValue: values[Key.colorScheme] as? String ?? "") ?? .dark }
+        set { set(newValue.rawValue, for: Key.colorScheme) }
     }
 
     /// Protections set weaker than their defaults, as short labels for the

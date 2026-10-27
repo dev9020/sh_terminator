@@ -23,6 +23,7 @@ final class FavoritesWindowController: NSWindowController, NSWindowDelegate, NST
     private let tableView = NSTableView()
     private let removeButton = NSButton()
     private let insertButton = NSButton()
+    private let hint = NSTextField(labelWithString: "Commands are inserted at the prompt, never run. Press Return in the terminal yourself.")
     /// `nil` is the built-in "Uncategorized" group.
     private var selectedCategory: UUID?
     /// The selected category's favorites, as the right table shows them.
@@ -55,6 +56,7 @@ final class FavoritesWindowController: NSWindowController, NSWindowDelegate, NST
         panel.center()
 
         NotificationCenter.default.addObserver(self, selector: #selector(storeDidChange(_:)), name: FavoritesStore.didChange, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(applyTheme), name: AppSettings.didChange, object: nil)
     }
 
     required init?(coder: NSCoder) {
@@ -160,9 +162,7 @@ final class FavoritesWindowController: NSWindowController, NSWindowDelegate, NST
         removeButton.target = self
         removeButton.action = #selector(removeFavorite(_:))
 
-        let hint = NSTextField(labelWithString: "Commands are inserted at the prompt, never run. Press Return in the terminal yourself.")
         hint.font = Theme.mono(10)
-        hint.textColor = Theme.muted
         hint.lineBreakMode = .byTruncatingTail
         hint.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
@@ -228,6 +228,21 @@ final class FavoritesWindowController: NSWindowController, NSWindowDelegate, NST
             tableView.selectRowIndexes([row], byExtendingSelection: false)
         }
         updateButtons()
+    }
+
+    /// Re-applies `Theme` colors: the panel background, both tables'
+    /// backgrounds, the hint text, and every already-built cell (by
+    /// reloading, since `tableView(_:viewFor:row:)` always re-colors the
+    /// field it returns).
+    @objc func applyTheme() {
+        guard let window = window as? NSPanel else { return }
+        Theme.style(window: window)
+        categoryTable.backgroundColor = Theme.panel
+        tableView.backgroundColor = Theme.background
+        hint.textColor = Theme.muted
+        categoryTable.reloadData()
+        tableView.reloadData()
+        window.contentView?.forceRedisplayTree()
     }
 
     @objc private func storeDidChange(_ notification: Notification) {
