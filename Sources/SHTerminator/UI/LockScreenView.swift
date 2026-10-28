@@ -425,6 +425,17 @@ private final class LockSceneView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        // Every time the lock screen is actually presented (whichever of
+        // PrivacyLock's triggers caused it — Lock Now, idle timeout, the
+        // Mac's own lock/sleep, …), rebuild from scratch rather than
+        // resuming whatever was left over from the last time: a resumed,
+        // long-paused layer tree is where the animation has been seen to
+        // glitch, while a fresh one is known to run cleanly.
+        if window != nil {
+            rainSize = .zero
+            hudSize = .zero
+            needsLayout = true
+        }
         updateRunning()
     }
 
